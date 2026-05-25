@@ -1,5 +1,5 @@
 // กำหนด Google Apps Script Web App URL ที่นี่ (ฝังไว้เพื่อให้ง่ายต่อการเรียนการสอนนักเรียน ปวส.)
-const API_URL = "https://script.google.com/macros/s/AKfycbyx6OF4IZzXYiPi3zYndh6AIy9p7HKY49gV0Mldg83NIPPxmbw69_cEzLTwCaB52l6m/exec"; // <-- แก้ไข URL นี้เป็น URL ของ Web App ที่คุณ Deploy ไว้
+const API_URL = "https://script.google.com/macros/s/AKfycbz0Y006gjERLnOonoS90k-ACDEBqgjmmfobzDyLkdvXkl_FhGHYcMf_vzaXikzAVgor/exec"; // <-- แก้ไข URL นี้เป็น URL ของ Web App ที่คุณ Deploy ไว้
 
 // App State
 let appState = {
@@ -80,6 +80,7 @@ async function fetchDataAll() {
     const logsData = await logsRes.json();
     if (logsData.status === 'success') appState.auditLogs = logsData.data;
 
+    populateSupplierDropdowns();
     renderProducts();
     renderSuppliers();
     renderLogs();
@@ -248,6 +249,7 @@ function renderProducts(filteredList = null) {
       <td class="py-3 px-4 font-mono text-xs font-semibold text-blue-600">${item.SKU}</td>
       <td class="py-3 px-4 font-medium text-slate-800">${item.Name}</td>
       <td class="py-3 px-4 text-xs text-slate-500">${item.Category}</td>
+      <td class="py-3 px-4 text-xs text-slate-500 font-mono">${item.SupplierID || '-'}</td>
       <td class="py-3 px-4 text-xs text-slate-600">${item.UOM}</td>
       <td class="py-3 px-4 text-right font-semibold text-blue-800">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
       <td class="py-3 px-4 text-center">
@@ -311,6 +313,18 @@ function renderProductPagination(totalItems, totalPages) {
 function changeProductPage(pageNum) {
   appState.productsCurrentPage = pageNum;
   renderProducts();
+}
+
+function populateSupplierDropdowns() {
+  const addSelect = document.getElementById('product-supplier-id');
+  const editSelect = document.getElementById('edit-product-supplier-id');
+  if (!addSelect || !editSelect) return;
+
+  const defaultOption = '<option value="">-- ไม่ระบุคู่ค้า --</option>';
+  const options = appState.suppliers.map(s => `<option value="${s.SupplierID}">${s.SupplierID} - ${s.CompanyName}</option>`).join('');
+  
+  addSelect.innerHTML = defaultOption + options;
+  editSelect.innerHTML = defaultOption + options;
 }
 
 function renderSuppliers(filteredList = null) {
@@ -401,6 +415,7 @@ function renderLogs(filteredList = null) {
         </td>
         <td class="py-2.5 px-4 font-semibold text-slate-700">${item.RecordType}</td>
         <td class="py-2.5 px-4 font-mono font-semibold text-blue-600">${item.PrimaryKey}</td>
+        <td class="py-2.5 px-4 font-mono text-slate-500">${item.SupplierID || '-'}</td>
         <td class="py-2.5 px-4">${item.Details || '-'}</td>
         <td class="py-2.5 px-4 text-slate-600">${item.Creator || '-'}</td>
         <td class="py-2.5 px-4 text-slate-600">${item.Editor || '-'}</td>
@@ -514,12 +529,14 @@ function filterLogs() {
   const filtered = appState.auditLogs.filter(l => {
     const key = String(l.PrimaryKey || '').toLowerCase();
     const type = String(l.RecordType || '').toLowerCase();
+    const supplier = String(l.SupplierID || '').toLowerCase();
     const details = String(l.Details || '').toLowerCase();
     const reason = String(l.Reason || '').toLowerCase();
     const creator = String(l.Creator || '').toLowerCase();
     const editor = String(l.Editor || '').toLowerCase();
     const preparer = String(l.Preparer || '').toLowerCase();
     return key.includes(query) || 
+           supplier.includes(query) ||
            type.includes(query) || 
            details.includes(query) || 
            reason.includes(query) || 
@@ -598,6 +615,7 @@ async function saveProduct(event) {
   const category = document.getElementById('product-category').value;
   const uom = document.getElementById('product-uom').value;
   const quantity = document.getElementById('product-quantity').value;
+  const supplierId = document.getElementById('product-supplier-id').value.trim();
   const description = document.getElementById('product-description').value.trim();
   const creator = document.getElementById('product-creator').value.trim();
   const preparer = document.getElementById('product-preparer').value.trim();
@@ -614,6 +632,7 @@ async function saveProduct(event) {
     category,
     uom,
     quantity,
+    supplierId,
     description,
     creator,
     editor: '',
@@ -641,6 +660,7 @@ function startEditProduct(sku) {
   document.getElementById('edit-product-category').value = product.Category;
   document.getElementById('edit-product-uom').value = product.UOM;
   document.getElementById('edit-product-quantity').value = product.Quantity;
+  document.getElementById('edit-product-supplier-id').value = product.SupplierID || '';
   document.getElementById('edit-product-description').value = product.Description || '';
   
   document.getElementById('edit-product-user-editor').value = appState.editor;
@@ -674,6 +694,7 @@ async function submitEditProduct(event) {
   const category = document.getElementById('edit-product-category').value;
   const uom = document.getElementById('edit-product-uom').value;
   const quantity = document.getElementById('edit-product-quantity').value;
+  const supplierId = document.getElementById('edit-product-supplier-id').value.trim();
   const description = document.getElementById('edit-product-description').value.trim();
   const editorName = document.getElementById('edit-product-user-editor').value.trim();
   const reason = document.getElementById('edit-product-reason').value.trim();
@@ -693,6 +714,7 @@ async function submitEditProduct(event) {
     category,
     uom,
     quantity,
+    supplierId,
     description,
     creator: '',
     editor: editorName,
@@ -970,6 +992,9 @@ function openPrintModal() {
 
   // Initialize print selections (all products selected by default)
   appState.printSelections = appState.products.map(item => item.SKU);
+  appState.printProductFilteredList = null;
+  appState.printProductCurrentPage = 1;
+  appState.printProductPerPage = 10;
 
   // Render selection checklist UI
   renderPrintSelectionList();
@@ -991,7 +1016,18 @@ function renderPrintSelectionList() {
   const tbody = document.getElementById('print-selection-body');
   if (!tbody) return;
 
-  tbody.innerHTML = appState.products.map(item => {
+  const list = appState.printProductFilteredList || appState.products;
+  const totalItems = list.length;
+  const totalPages = Math.ceil(totalItems / appState.printProductPerPage) || 1;
+
+  if (appState.printProductCurrentPage > totalPages) appState.printProductCurrentPage = totalPages;
+  if (appState.printProductCurrentPage < 1) appState.printProductCurrentPage = 1;
+
+  const startIdx = (appState.printProductCurrentPage - 1) * appState.printProductPerPage;
+  const endIdx = Math.min(startIdx + appState.printProductPerPage, totalItems);
+  const pageList = list.slice(startIdx, endIdx);
+
+  tbody.innerHTML = pageList.map(item => {
     const isChecked = appState.printSelections.includes(item.SKU);
     return `
       <tr id="print-select-row-${item.SKU}">
@@ -999,12 +1035,66 @@ function renderPrintSelectionList() {
           <input type="checkbox" class="form-check-input form-check-input-lg" id="print-chk-${item.SKU}" ${isChecked ? 'checked' : ''} onchange="togglePrintProduct('${item.SKU}', this.checked)">
         </td>
         <td class="font-mono">${item.SKU}</td>
+        <td class="font-mono text-xs text-muted">${item.SupplierID || '-'}</td>
         <td class="fw-semibold text-dark">${item.Name}</td>
         <td>${item.Category}</td>
         <td class="text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')} ${item.UOM}</td>
       </tr>
     `;
   }).join('');
+  
+  renderPrintSelectionPagination(totalItems, totalPages);
+}
+
+function renderPrintSelectionPagination(totalItems, totalPages) {
+  const info = document.getElementById('print-selection-pagination-info');
+  const listContainer = document.getElementById('print-selection-pagination-list');
+  if (!info || !listContainer) return;
+
+  if (totalItems === 0) {
+    info.innerText = 'ไม่พบข้อมูล';
+    listContainer.innerHTML = '';
+    return;
+  }
+
+  const start = (appState.printProductCurrentPage - 1) * appState.printProductPerPage + 1;
+  const end = Math.min(start + appState.printProductPerPage - 1, totalItems);
+  info.innerText = `แสดงข้อมูล ${start} - ${end} จากทั้งหมด ${totalItems} รายการ`;
+
+  let paginationHtml = '';
+  const prevDisabled = appState.printProductCurrentPage === 1 ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${prevDisabled}">
+      <button class="page-link" onclick="changePrintSelectionPage(${appState.printProductCurrentPage - 1})" aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </button>
+    </li>
+  `;
+
+  for (let i = 1; i <= totalPages; i++) {
+    const activeClass = i === appState.printProductCurrentPage ? 'active' : '';
+    paginationHtml += `
+      <li class="page-item ${activeClass}">
+        <button class="page-link" onclick="changePrintSelectionPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  const nextDisabled = appState.printProductCurrentPage === totalPages ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${nextDisabled}">
+      <button class="page-link" onclick="changePrintSelectionPage(${appState.printProductCurrentPage + 1})" aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </button>
+    </li>
+  `;
+
+  listContainer.innerHTML = paginationHtml;
+}
+
+function changePrintSelectionPage(pageNum) {
+  appState.printProductCurrentPage = pageNum;
+  renderPrintSelectionList();
 }
 
 function togglePrintProduct(sku, isChecked) {
@@ -1044,20 +1134,19 @@ function selectAllPrintProducts(shouldSelectAll) {
 function filterPrintSelection() {
   const query = document.getElementById('print-search-products').value.toLowerCase().trim();
   
-  appState.products.forEach(item => {
-    const row = document.getElementById(`print-select-row-${item.SKU}`);
-    if (!row) return;
-
-    const matchesSKU = item.SKU.toLowerCase().includes(query);
-    const matchesName = item.Name.toLowerCase().includes(query);
-    const matchesCategory = item.Category.toLowerCase().includes(query);
-
-    if (matchesSKU || matchesName || matchesCategory) {
-      row.classList.remove('d-none');
-    } else {
-      row.classList.add('d-none');
-    }
-  });
+  if (!query) {
+    appState.printProductFilteredList = null;
+  } else {
+    appState.printProductFilteredList = appState.products.filter(item => {
+      const matchesSKU = item.SKU.toLowerCase().includes(query);
+      const matchesName = item.Name.toLowerCase().includes(query);
+      const matchesCategory = item.Category.toLowerCase().includes(query);
+      const matchesSupplier = (item.SupplierID || '').toLowerCase().includes(query);
+      return matchesSKU || matchesName || matchesCategory || matchesSupplier;
+    });
+  }
+  appState.printProductCurrentPage = 1;
+  renderPrintSelectionList();
 }
 
 function renderPrintPreview() {
@@ -1084,7 +1173,7 @@ function renderPrintPreview() {
       <td class="py-2 px-3 border-end border-secondary-subtle text-center">${index + 1}</td>
       <td class="py-2 px-3 border-end border-secondary-subtle font-mono">${item.SKU}</td>
       <td class="py-2 px-3 border-end border-secondary-subtle fw-semibold text-dark">${item.Name}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle">${item.Category}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle text-center font-mono" style="font-size: 0.9em;">${item.SupplierID || '-'}</td>
       <td class="py-2 px-3 border-end border-secondary-subtle text-center">${item.UOM}</td>
       <td class="py-2 px-3 border-end border-secondary-subtle text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
       <td class="py-2 px-3 text-center text-secondary opacity-50">

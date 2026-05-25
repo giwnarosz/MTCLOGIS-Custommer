@@ -42,11 +42,11 @@ function getOrCreateSheet(sheetName) {
     sheet = ss.insertSheet(sheetName);
     let headers = [];
     if (sheetName === 'Products') {
-      headers = ['SKU', 'Name', 'Category', 'UOM', 'Description', 'Quantity', 'DateAdded'];
+      headers = ['SKU', 'Name', 'Category', 'UOM', 'Description', 'Quantity', 'SupplierID', 'DateAdded'];
     } else if (sheetName === 'Suppliers') {
       headers = ['SupplierID', 'CompanyName', 'TaxID', 'BusinessType', 'ContactPerson', 'Phone', 'Email', 'RegisteredAddress', 'MailingAddress', 'DateAdded'];
     } else if (sheetName === 'AuditLogs') {
-      headers = ['Timestamp', 'ActionType', 'RecordType', 'PrimaryKey', 'Details', 'Creator', 'Editor', 'Preparer', 'Reason'];
+      headers = ['Timestamp', 'ActionType', 'RecordType', 'PrimaryKey', 'SupplierID', 'Details', 'Creator', 'Editor', 'Preparer', 'Reason'];
     }
     if (headers.length > 0) {
       sheet.appendRow(headers);
@@ -120,10 +120,10 @@ function getProducts() { return getSheetData('Products'); }
 function getSuppliers() { return getSheetData('Suppliers'); }
 function getAuditLogs() { return getSheetData('AuditLogs'); }
 
-function logAudit(actionType, recordType, primaryKey, details, user1, user2, user3, reason) {
+function logAudit(actionType, recordType, primaryKey, supplierId, details, user1, user2, user3, reason) {
   const sheet = getOrCreateSheet('AuditLogs');
   const timestamp = new Date();
-  sheet.appendRow([timestamp, actionType, recordType, primaryKey, details, user1, user2, user3, reason || '-']);
+  sheet.appendRow([timestamp, actionType, recordType, primaryKey, supplierId || '', details, user1, user2, user3, reason || '-']);
 }
 
 // =========================================================================
@@ -148,10 +148,11 @@ function addProduct(data) {
     data.uom, 
     data.description || '', 
     Number(data.quantity), 
+    data.supplierId || '',
     new Date().toISOString()
   ]);
   
-  logAudit('ADD', 'Product', data.sku, `เพิ่มสินค้า: ${data.name} UOM: ${data.uom} จำนวน: ${data.quantity}`, data.creator, data.editor, data.preparer, 'เพิ่มใหม่');
+  logAudit('ADD', 'Product', data.sku, data.supplierId, `เพิ่มสินค้า: ${data.name} UOM: ${data.uom} จำนวน: ${data.quantity}`, data.creator, data.editor, data.preparer, 'เพิ่มใหม่');
   return 'Product added successfully';
 }
 
@@ -174,8 +175,9 @@ function editProduct(data) {
       sheet.getRange(i + 1, 4).setValue(data.uom);
       sheet.getRange(i + 1, 5).setValue(data.description || '');
       sheet.getRange(i + 1, 6).setValue(Number(data.quantity));
+      sheet.getRange(i + 1, 7).setValue(data.supplierId || '');
       
-      logAudit('EDIT', 'Product', data.sku, `แก้ไขสินค้า: ${data.name} จำนวน: ${data.quantity}`, data.creator, data.editor, data.preparer, data.reason);
+      logAudit('EDIT', 'Product', data.sku, data.supplierId, `แก้ไขสินค้า: ${data.name} จำนวน: ${data.quantity}`, data.creator, data.editor, data.preparer, data.reason);
       return 'Product updated successfully';
     }
   }
@@ -189,7 +191,7 @@ function deleteProduct(data) {
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.sku) {
       sheet.deleteRow(i + 1);
-      logAudit('DELETE', 'Product', data.sku, `ลบสินค้า`, data.creator, data.editor, data.preparer, data.reason);
+      logAudit('DELETE', 'Product', data.sku, '', `ลบสินค้า`, data.creator, data.editor, data.preparer, data.reason);
       return 'Product deleted successfully';
     }
   }
@@ -227,7 +229,7 @@ function addSupplier(data) {
     new Date().toISOString()
   ]);
   
-  logAudit('ADD', 'Supplier', data.supplierId, `เพิ่มคู่ค้า: ${data.companyName}`, data.creator, data.editor, data.preparer, 'เพิ่มใหม่');
+  logAudit('ADD', 'Supplier', data.supplierId, data.supplierId, `เพิ่มคู่ค้า: ${data.companyName}`, data.creator, data.editor, data.preparer, 'เพิ่มใหม่');
   return 'Supplier added successfully';
 }
 
@@ -257,7 +259,7 @@ function editSupplier(data) {
       sheet.getRange(i + 1, 8).setValue(data.registeredAddress);
       sheet.getRange(i + 1, 9).setValue(data.mailingAddress || '');
       
-      logAudit('EDIT', 'Supplier', data.supplierId, `แก้ไขคู่ค้า: ${data.companyName}`, data.creator, data.editor, data.preparer, data.reason);
+      logAudit('EDIT', 'Supplier', data.supplierId, data.supplierId, `แก้ไขคู่ค้า: ${data.companyName}`, data.creator, data.editor, data.preparer, data.reason);
       return 'Supplier updated successfully';
     }
   }
@@ -271,7 +273,7 @@ function deleteSupplier(data) {
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.supplierId) {
       sheet.deleteRow(i + 1);
-      logAudit('DELETE', 'Supplier', data.supplierId, `ลบคู่ค้า`, data.creator, data.editor, data.preparer, data.reason);
+      logAudit('DELETE', 'Supplier', data.supplierId, data.supplierId, `ลบคู่ค้า`, data.creator, data.editor, data.preparer, data.reason);
       return 'Supplier deleted successfully';
     }
   }
@@ -300,14 +302,14 @@ function createMockData() {
   sheetSuppliers.appendRow(['SupplierID', 'CompanyName', 'TaxID', 'BusinessType', 'ContactPerson', 'Phone', 'Email', 'RegisteredAddress', 'MailingAddress', 'DateAdded']);
   
   sheetLogs.clear();
-  sheetLogs.appendRow(['Timestamp', 'ActionType', 'RecordType', 'PrimaryKey', 'Details', 'Creator', 'Editor', 'Preparer', 'Reason']);
+  sheetLogs.appendRow(['Timestamp', 'ActionType', 'RecordType', 'PrimaryKey', 'SupplierID', 'Details', 'Creator', 'Editor', 'Preparer', 'Reason']);
   
   // เติมสินค้าสินค้าทดสอบ
-  const p1 = ['PROD-COM-001', 'คอมพิวเตอร์แล็ปท็อป 15 นิ้ว', 'อะไหล่', 'ชิ้น', 'สเปก Core i7, RAM 16GB, SSD 512GB', 15, new Date().toISOString()];
-  const p2 = ['PROD-BOX-002', 'กล่องกระดาษลูกฟูก ขนาด ก', 'บรรจุภัณฑ์', 'ลัง', 'กล่องใส่สินค้าหนา 3 ชั้น', 200, new Date().toISOString()];
-  const p3 = ['PROD-KEY-003', 'คีย์บอร์ดไร้สายบลูทูธ', 'อะไหล่', 'ชิ้น', 'คีย์บอร์ดไร้เสียงสำหรับสำนักงาน', 45, new Date().toISOString()];
-  const p4 = ['PROD-PAP-004', 'กระดาษ A4 80 แกรม', 'วัสดุสิ้นเปลือง', 'กล่อง', 'กระดาษถ่ายเอกสาร 5 รีม/กล่อง', 80, new Date().toISOString()];
-  const p5 = ['PROD-PEN-005', 'ปากกาเจลสีน้ำเงิน 0.5 มม.', 'วัสดุสิ้นเปลือง', 'กล่อง', 'บรรจุกระปุกละ 50 ด้าม', 120, new Date().toISOString()];
+  const p1 = ['PROD-COM-001', 'คอมพิวเตอร์แล็ปท็อป 15 นิ้ว', 'อะไหล่', 'ชิ้น', 'สเปก Core i7, RAM 16GB, SSD 512GB', 15, 'SUP-001', new Date().toISOString()];
+  const p2 = ['PROD-BOX-002', 'กล่องกระดาษลูกฟูก ขนาด ก', 'บรรจุภัณฑ์', 'ลัง', 'กล่องใส่สินค้าหนา 3 ชั้น', 200, 'SUP-002', new Date().toISOString()];
+  const p3 = ['PROD-KEY-003', 'คีย์บอร์ดไร้สายบลูทูธ', 'อะไหล่', 'ชิ้น', 'คีย์บอร์ดไร้เสียงสำหรับสำนักงาน', 45, 'SUP-001', new Date().toISOString()];
+  const p4 = ['PROD-PAP-004', 'กระดาษ A4 80 แกรม', 'วัสดุสิ้นเปลือง', 'กล่อง', 'กระดาษถ่ายเอกสาร 5 รีม/กล่อง', 80, 'SUP-003', new Date().toISOString()];
+  const p5 = ['PROD-PEN-005', 'ปากกาเจลสีน้ำเงิน 0.5 มม.', 'วัสดุสิ้นเปลือง', 'กล่อง', 'บรรจุกระปุกละ 50 ด้าม', 120, 'SUP-005', new Date().toISOString()];
   
   const mockProducts = [p1, p2, p3, p4, p5];
   mockProducts.forEach(row => sheetProducts.appendRow(row));
@@ -324,10 +326,10 @@ function createMockData() {
 
   // เติมประวัติทดสอบ
   const prepName = 'นายปาณชัย พรมภักดี';
-  const l1 = [new Date(), 'ADD', 'Product', 'PROD-COM-001', 'เพิ่มสินค้า: โน้ตบุ๊ก', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
-  const l2 = [new Date(), 'ADD', 'Product', 'PROD-BOX-002', 'เพิ่มสินค้า: กล่องลูกฟูก', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
-  const l3 = [new Date(), 'ADD', 'Supplier', 'SUP-001', 'เพิ่มคู่ค้า: บจก.ไทยแลนด์', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
-  const l4 = [new Date(), 'ADD', 'Supplier', 'SUP-002', 'เพิ่มคู่ค้า: หจก.รุ่งเรือง', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
+  const l1 = [new Date(), 'ADD', 'Product', 'PROD-COM-001', 'SUP-001', 'เพิ่มสินค้า: โน้ตบุ๊ก', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
+  const l2 = [new Date(), 'ADD', 'Product', 'PROD-BOX-002', 'SUP-002', 'เพิ่มสินค้า: กล่องลูกฟูก', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
+  const l3 = [new Date(), 'ADD', 'Supplier', 'SUP-001', 'SUP-001', 'เพิ่มคู่ค้า: บจก.ไทยแลนด์', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
+  const l4 = [new Date(), 'ADD', 'Supplier', 'SUP-002', 'SUP-002', 'เพิ่มคู่ค้า: หจก.รุ่งเรือง', 'นายสมชาย', '', prepName, 'เพิ่มระบบ'];
   
   const mockLogs = [l1, l2, l3, l4];
   mockLogs.forEach(row => sheetLogs.appendRow(row));
