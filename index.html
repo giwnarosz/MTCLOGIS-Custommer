@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบริหารจัดการคลังสินค้าและคู่ค้า | Enterprise Inventory</title>
+  
+  <!-- Bootstrap 5.3.3 CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Google Fonts: Sarabun & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    body {
+      font-family: 'Sarabun', 'Inter', sans-serif;
+      background-color: #f1f5f9;
+    }
+    .gradient-bg {
+      background: linear-gradient(185deg, #0f172a 0%, #1e293b 100%) !important;
+    }
+    .active-tab {
+      background-color: #0d6efd !important;
+      color: white !important;
+      box-shadow: 0 4px 14px 0 rgba(13, 110, 253, 0.35) !important;
+      font-weight: 600;
+    }
+    .text-slate-300 {
+      color: #cbd5e1 !important;
+    }
+    .text-slate-300:hover {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: white !important;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block !important;
+      animation: fadeIn 0.25s ease-in-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hidden {
+      display: none !important;
+    }
+    
+    /* Overlay Modals CSS */
+    #edit-product-modal,
+    #edit-supplier-modal,
+    #print-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1050;
+    }
+    #edit-product-modal:not(.hidden),
+    #edit-supplier-modal:not(.hidden),
+    #print-modal:not(.hidden) {
+      display: block !important;
+    }
+    .modal-dialog-custom {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 1rem;
+    }
+    .modal-content-custom {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 0;
+    }
+    .form-check-input-lg {
+      width: 1.35em;
+      height: 1.35em;
+      cursor: pointer;
+    }
+    
+    /* CSS for Stock Printing */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm 12mm !important;
+      }
+      body * {
+        visibility: hidden;
+      }
+      #print-area, #print-area * {
+        visibility: visible;
+      }
+      #print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        color: #000;
+        background: #fff;
+      }
+      .no-print {
+        display: none !important;
+      }
+      table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+      }
+      th, td {
+        border: 1px solid #000 !important;
+        padding: 5px 8px !important;
+        text-align: left !important;
+      }
+      th {
+        background-color: #f3f4f6 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      tr, .mt-3 {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    }
+  </style>
+</head>
+<body class="text-secondary min-vh-100 flex-column">
+
+  <!-- Setup Warning banner (if API is not set) -->
+  <div id="api-alert-banner" class="bg-warning text-dark px-3 py-2 text-center text-sm font-medium d-flex align-items-center justify-content-center gap-2 transition-all">
+    <i class="fa-solid fa-triangle-exclamation animate-bounce"></i>
+    <span>กรุณาใส่ Google Apps Script Web App URL ในไฟล์ <code class="bg-light px-1 py-0.5 rounded text-danger font-mono text-xs">js/app.js</code> (ตัวแปร API_URL) เพื่อเชื่อมต่อคลังสินค้าจริง</span>
+  </div>
+
+  <div class="d-flex flex-column flex-lg-row min-vh-100">
+    
+    <!-- Mobile Top Navigation Header (Visible only on <lg screens) -->
+    <header class="navbar navbar-dark bg-dark d-lg-none px-3 sticky-top shadow">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <div class="rounded-circle bg-white overflow-hidden d-flex align-items-center justify-content-center shadow-sm" style="width: 34px; height: 34px; border: 1.5px solid #fff;">
+          <img src="img/logo.jpg" alt="Logo" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 28.6%; transform: scale(3.1); transform-origin: 50% 28.6%;">
+        </div>
+        <div class="d-flex flex-column">
+          <span class="fs-6 fw-bold text-white lh-1">Enterprise Stock</span>
+          <span class="text-slate-300 font-normal text-truncate" style="font-size: 8px; max-width: 180px;">สาขาวิชาโลจิสติกส์ วิทยาลัยเทคนิคแม่สอด</span>
+        </div>
+      </a>
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+    </header>
+
+    <!-- Responsive Sidebar Menu (Offcanvas on Mobile, Permanent on Desktop) -->
+    <aside class="offcanvas-lg offcanvas-start gradient-bg text-slate-300 flex-shrink-0 d-flex flex-column justify-content-between shadow-lg" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel" style="width: 280px;">
+      <div>
+        <!-- Sidebar Header (Logo info) -->
+        <div class="p-4 border-bottom border-secondary d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-white overflow-hidden d-flex align-items-center justify-content-center shadow-lg" style="width: 42px; height: 42px; border: 2px solid #fff;">
+              <img src="img/logo.jpg" alt="Logo" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 28.6%; transform: scale(3.1); transform-origin: 50% 28.6%;">
+            </div>
+            <div>
+              <h6 class="m-0 text-white fw-bold tracking-wide lh-sm">Enterprise Stock</h6>
+              <small class="text-info d-block" style="font-size: 10px;">ระบบคลังสินค้า & คู่ค้า</small>
+            </div>
+          </div>
+          <!-- Close Button for Mobile -->
+          <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" aria-label="Close"></button>
+        </div>
+
+        <div class="p-3 mx-3 my-2 rounded bg-black bg-opacity-25 border border-secondary border-opacity-25">
+          <div class="text-info fw-bold fs-5 tracking-wide">สาขาวิชาโลจิสติกส์</div>
+          <div class="text-white fw-bold fs-6 mt-1">วิทยาลัยเทคนิคแม่สอด</div>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="p-2 d-flex flex-column gap-1">
+          <button onclick="switchTab('products')" id="tab-btn-products" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" class="btn text-start d-flex align-items-center gap-3 px-3 py-2.5 rounded-3 border-0 active-tab transition-all">
+            <i class="fa-solid fa-box fs-5"></i>
+            <span style="font-size: 14px;">จัดการสินค้า (Products)</span>
+          </button>
+          
+          <button onclick="switchTab('suppliers')" id="tab-btn-suppliers" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" class="btn text-start d-flex align-items-center gap-3 px-3 py-2.5 rounded-3 border-0 text-slate-300 transition-all">
+            <i class="fa-solid fa-truck-field fs-5"></i>
+            <span style="font-size: 14px;">จัดการคู่ค้า (Suppliers)</span>
+          </button>
+          
+          <button onclick="switchTab('audit-logs')" id="tab-btn-audit-logs" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" class="btn text-start d-flex align-items-center gap-3 px-3 py-2.5 rounded-3 border-0 text-slate-300 transition-all">
+            <i class="fa-solid fa-clock-rotate-left fs-5"></i>
+            <span style="font-size: 14px;">ประวัติการทำงาน (Audit Log)</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Action Footer & Print Sheet -->
+      <div class="p-3 border-top border-secondary">
+        <button onclick="openPrintModal()" class="btn btn-success w-100 d-flex align-items-center justify-content-center gap-2 py-2 fw-semibold shadow-sm rounded-3">
+          <i class="fa-solid fa-print"></i>
+          <span>พิมพ์ใบเช็คสต็อก</span>
+        </button>
+        <div class="text-center text-muted mt-3" style="font-size: 10px;">
+          v1.1.0 Enterprise Edition
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow-1 d-flex flex-column bg-light" style="min-width: 0;">
+      
+      <!-- Top Navbar (Desktop Only Header) -->
+      <header class="navbar navbar-light bg-white border-bottom px-4 py-3 d-none d-lg-flex shadow-sm">
+        <span id="page-title" class="fs-5 fw-bold text-dark">จัดการสินค้า (Products)</span>
+      </header>
+
+      <!-- Central Content Space -->
+      <div class="container-fluid p-3 p-md-4 flex-grow-1">
+
+        <!-- ==================== PRODUCTS TAB ==================== -->
+        <div id="tab-products" class="tab-content active">
+          <div class="row g-4">
+            
+            <!-- Product Form (1/3 Width on Large Screen) -->
+            <div class="col-lg-4 col-12">
+              <div class="card shadow-sm border-0 rounded-3 p-4">
+                <h5 class="fw-bold text-dark mb-4 d-flex align-items-center gap-2 border-bottom pb-2">
+                  <i class="fa-solid fa-pen-to-square text-primary"></i>
+                  <span id="product-form-title">เพิ่มสินค้าใหม่</span>
+                </h5>
+                
+                <form id="product-form" onsubmit="saveProduct(event)" class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-sku">รหัสสินค้า (SKU / Item Code) <span class="text-danger">*</span></label>
+                    <input type="text" id="product-sku" required placeholder="เช่น PROD-COM-001" class="form-control font-mono">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-name">ชื่อสินค้า (Product Name) <span class="text-danger">*</span></label>
+                    <input type="text" id="product-name" required placeholder="ระบุชื่อเรียกสินค้าในคลัง" class="form-control">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold text-secondary small" for="product-category">หมวดหมู่ <span class="text-danger">*</span></label>
+                    <input type="text" id="product-category" required placeholder="เช่น อะไหล่" class="form-control">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold text-secondary small" for="product-uom">หน่วยนับ (UOM) <span class="text-danger">*</span></label>
+                    <input type="text" id="product-uom" required placeholder="เช่น ชิ้น, ลัง" class="form-control">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-quantity">จำนวนสินค้าเข้ามาในคลัง <span class="text-danger">*</span></label>
+                    <input type="number" id="product-quantity" required min="0" placeholder="0" class="form-control">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-description">รายละเอียด/สเปก (Description)</label>
+                    <textarea id="product-description" rows="3" placeholder="ข้อมูลจำเพาะเพิ่มเติม..." class="form-control"></textarea>
+                  </div>
+
+                  <div class="col-12 border-top pt-3 mt-3">
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold text-secondary small" for="product-creator">ผู้เพิ่ม/ผู้บันทึกข้อมูล (Creator) <span class="text-danger">*</span></label>
+                      <input type="text" id="product-creator" required placeholder="ระบุชื่อจริงผู้ป้อนข้อมูล" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="product-preparer">ผู้จัดทำ/ผู้ยืนยันงาน (Preparer) <span class="text-danger">*</span></label>
+                      <input type="text" id="product-preparer" required value="นายปาณชัย พรมภักดี" readonly class="form-control bg-light text-muted fw-bold border-secondary-subtle">
+                    </div>
+                  </div>
+
+                  <div class="col-12 pt-2">
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2 rounded-3 shadow-sm">
+                      <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Product Table Preview (2/3 Width on Large Screen) -->
+            <div class="col-lg-8 col-12">
+              <div class="card shadow-sm border-0 rounded-3 p-4 h-100">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+                  <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-list text-primary"></i>
+                    <span>ตารางข้อมูลสินค้า</span>
+                  </h5>
+                  <!-- Search box -->
+                  <div class="input-group" style="max-width: 280px;">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" id="search-products" oninput="filterProducts()" placeholder="ค้นหารหัส หรือชื่อสินค้า..." class="form-control border-start-0 ps-1">
+                  </div>
+                </div>
+
+                <!-- Products Table Area -->
+                <div class="table-responsive rounded border border-light-subtle flex-grow-1">
+                  <table class="table table-hover align-middle mb-0 text-nowrap">
+                    <thead class="table-light text-secondary fw-semibold small">
+                      <tr>
+                        <th class="py-3 px-4 font-mono">SKU</th>
+                        <th class="py-3 px-4">ชื่อสินค้า</th>
+                        <th class="py-3 px-4">หมวดหมู่</th>
+                        <th class="py-3 px-4">หน่วยนับ</th>
+                        <th class="py-3 px-4 text-end">จำนวนคงคลัง</th>
+                        <th class="py-3 px-4 text-center">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody id="product-table-body" class="small">
+                      <tr>
+                        <td colspan="6" class="text-center py-5 text-muted"><i class="fa-solid fa-spinner animate-spin me-2"></i>กำลังโหลดข้อมูล...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ==================== SUPPLIERS TAB ==================== -->
+        <div id="tab-suppliers" class="tab-content">
+          <div class="row g-4">
+            
+            <!-- Supplier Form -->
+            <div class="col-lg-4 col-12">
+              <div class="card shadow-sm border-0 rounded-3 p-4">
+                <h5 class="fw-bold text-dark mb-4 d-flex align-items-center gap-2 border-bottom pb-2">
+                  <i class="fa-solid fa-pen-to-square text-primary"></i>
+                  <span id="supplier-form-title">เพิ่มคู่ค้าใหม่</span>
+                </h5>
+                
+                <form id="supplier-form" onsubmit="saveSupplier(event)" class="row g-3">
+                  <!-- 1. ข้อมูลพื้นฐานบริษัท -->
+                  <div class="col-12 space-y-1">
+                    <span class="d-flex align-items-center gap-1.5 fw-bold text-dark small border-bottom pb-1 mb-2">
+                      <i class="fa-solid fa-building text-primary"></i> 1. ข้อมูลพื้นฐานบริษัท
+                    </span>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-id">รหัสคู่ค้า (Supplier ID) <span class="text-danger">*</span></label>
+                      <input type="text" id="supplier-id" required placeholder="เช่น SUP-001" class="form-control font-mono">
+                    </div>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-company-name">ชื่อบริษัท / ห้างหุ้นส่วน <span class="text-danger">*</span></label>
+                      <input type="text" id="supplier-company-name" required placeholder="ระบุชื่อจดทะเบียนบริษัท" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-tax-id">เลขผู้เสียภาษี (13 หลัก) <span class="text-danger">*</span></label>
+                      <input type="text" id="supplier-tax-id" required pattern="\d{13}" maxLength="13" placeholder="ตัวเลข 13 หลัก" class="form-control font-mono">
+                    </div>
+                  </div>
+
+                  <!-- 2. ข้อมูลการติดต่อ -->
+                  <div class="col-12 pt-2">
+                    <span class="d-flex align-items-center gap-1.5 fw-bold text-dark small border-bottom pb-1 mb-2">
+                      <i class="fa-solid fa-address-book text-success"></i> 2. ข้อมูลการติดต่อ
+                    </span>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-contact-person">ชื่อผู้ติดต่อหลัก</label>
+                      <input type="text" id="supplier-contact-person" placeholder="ชื่อพนักงานขาย / ผู้ประสานงาน" class="form-control">
+                    </div>
+                    <div class="row g-2 mb-2">
+                      <div class="col-6">
+                        <label class="form-label fw-semibold text-secondary small" for="supplier-phone">เบอร์โทรศัพท์ <span class="text-danger">*</span></label>
+                        <input type="tel" id="supplier-phone" required placeholder="เช่น 02-555-9999" class="form-control">
+                      </div>
+                      <div class="col-6">
+                        <label class="form-label fw-semibold text-secondary small" for="supplier-email">อีเมล</label>
+                        <input type="email" id="supplier-email" placeholder="sales@company.com" class="form-control">
+                      </div>
+                    </div>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-registered-address">ที่อยู่จดทะเบียนภาษี <span class="text-danger">*</span></label>
+                      <textarea id="supplier-registered-address" required rows="2" placeholder="ที่อยู่ในการออกใบกำกับภาษี..." class="form-control" oninput="syncMailingAddress()"></textarea>
+                    </div>
+                    <div class="form-check mb-2">
+                      <input type="checkbox" id="supplier-same-address" onchange="toggleMailingAddressSync()" checked class="form-check-input">
+                      <label for="supplier-same-address" class="form-check-label small text-secondary">ใช้ที่อยู่เดียวกับจดทะเบียนจัดส่ง</label>
+                    </div>
+                    <div id="mailing-address-group" class="mb-2 d-none">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-mailing-address">ที่อยู่จัดส่งสินค้า/เอกสาร</label>
+                      <textarea id="supplier-mailing-address" rows="2" placeholder="ระบุที่อยู่จัดส่ง..." class="form-control"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="col-12 border-top pt-3 mt-3">
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-creator">ผู้เพิ่ม/ผู้บันทึกข้อมูล (Creator) <span class="text-danger">*</span></label>
+                      <input type="text" id="supplier-creator" required placeholder="ระบุชื่อผู้เพิ่มข้อมูล" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                      <label class="form-label fw-semibold text-secondary small" for="supplier-preparer">ผู้จัดทำ/ผู้ยืนยันงาน (Preparer) <span class="text-danger">*</span></label>
+                      <input type="text" id="supplier-preparer" required value="นายปาณชัย พรมภักดี" readonly class="form-control bg-light text-muted fw-bold border-secondary-subtle">
+                    </div>
+                  </div>
+
+                  <div class="col-12 pt-2">
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2 rounded-3 shadow-sm">
+                      <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Supplier Table Preview -->
+            <div class="col-lg-8 col-12">
+              <div class="card shadow-sm border-0 rounded-3 p-4 h-100">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+                  <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-list text-primary"></i>
+                    <span>ตารางข้อมูลคู่ค้า</span>
+                  </h5>
+                  <!-- Search box -->
+                  <div class="input-group" style="max-width: 280px;">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" id="search-suppliers" oninput="filterSuppliers()" placeholder="ค้นหาคู่ค้า หรือเลขประจำตัว..." class="form-control border-start-0 ps-1">
+                  </div>
+                </div>
+
+                <!-- Suppliers Table Area -->
+                <div class="table-responsive rounded border border-light-subtle flex-grow-1">
+                  <table class="table table-hover align-middle mb-0 text-nowrap">
+                    <thead class="table-light text-secondary fw-semibold small">
+                      <tr>
+                        <th class="py-3 px-4 font-mono">รหัสคู่ค้า</th>
+                        <th class="py-3 px-4">ชื่อบริษัทคู่ค้า</th>
+                        <th class="py-3 px-4">เลขผู้เสียภาษี</th>
+                        <th class="py-3 px-4">เบอร์โทรศัพท์</th>
+                        <th class="py-3 px-4 text-center">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody id="supplier-table-body" class="small">
+                      <tr>
+                        <td colspan="5" class="text-center py-5 text-muted"><i class="fa-solid fa-spinner animate-spin me-2"></i>กำลังโหลดข้อมูล...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ==================== AUDIT LOGS TAB ==================== -->
+        <div id="tab-audit-logs" class="tab-content">
+          <div class="card shadow-sm border-0 rounded-3 p-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+              <div>
+                <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+                  <i class="fa-solid fa-clock-rotate-left text-primary"></i>
+                  <span>ประวัติการทำงาน (Audit Log)</span>
+                </h5>
+                <p class="text-muted small m-0 mt-1">ประวัติการทำรายการเข้าคลังสินค้า/คู่ค้า ทั้งหมด (โหมดตรวจสอบ/อ่านอย่างเดียว)</p>
+              </div>
+              
+              <div class="d-flex align-items-center gap-2">
+                <!-- Search box -->
+                <div class="input-group" style="max-width: 280px;">
+                  <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                  <input type="text" id="search-logs" oninput="filterLogs()" placeholder="ค้นหาข้อมูล หรือ เหตุผล..." class="form-control border-start-0 ps-1">
+                </div>
+                <button onclick="fetchAuditLogs()" class="btn btn-outline-secondary px-3 py-2" title="รีเฟรชประวัติ">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Audit Logs Table Area -->
+            <div class="table-responsive rounded border border-light-subtle">
+              <table class="table table-hover align-middle mb-0 text-nowrap" style="font-size: 12px;">
+                <thead class="table-light text-secondary fw-semibold">
+                  <tr>
+                    <th class="py-3 px-3">วัน-เวลา</th>
+                    <th class="py-3 px-3 text-center">ประเภทคำสั่ง</th>
+                    <th class="py-3 px-3">เป้าหมาย</th>
+                    <th class="py-3 px-3">คีย์หลัก</th>
+                    <th class="py-3 px-3" style="min-width: 250px;">รายละเอียด</th>
+                    <th class="py-3 px-3">ผู้เพิ่ม</th>
+                    <th class="py-3 px-3">ผู้แก้ไข</th>
+                    <th class="py-3 px-3">ผู้จัดทำ</th>
+                    <th class="py-3 px-3">เหตุผล</th>
+                  </tr>
+                </thead>
+                <tbody id="logs-table-body" class="text-secondary font-sans">
+                  <tr>
+                    <td colspan="9" class="text-center py-5 text-muted">กำลังโหลดประวัติ...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Print Stock Check Modal -->
+  <div id="print-modal" class="hidden">
+    <div class="modal-dialog-custom">
+      <div class="modal-content-custom" style="max-width: 900px;">
+        <!-- Header -->
+        <div class="p-4 border-bottom bg-light d-flex align-items-center justify-content-between no-print">
+          <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+            <i class="fa-solid fa-print text-success"></i>
+            <span>จัดเตรียมการพิมพ์ใบตรวจสอบสต็อก (Stock Check Sheet)</span>
+          </h5>
+          <button type="button" class="btn-close" onclick="closePrintModal()"></button>
+        </div>
+
+        <!-- Print config control panel -->
+        <div class="p-4 border-bottom bg-light bg-opacity-25 d-flex flex-column gap-3 no-print">
+          <h6 class="fw-bold text-dark m-0"><i class="fa-solid fa-user-check text-primary me-2"></i>ระบุรายนามผู้ลงลายมือชื่อในเอกสาร</h6>
+          <div class="row g-3">
+            <div class="col-md-6 col-12">
+              <label class="form-label fw-semibold text-secondary small" for="print-input-preparer">ผู้จัดทำ (นักเรียนเจ้าหน้าที่ผู้พิมพ์)</label>
+              <input type="text" id="print-input-preparer" oninput="updatePrintNames()" placeholder="ป้อนชื่อผู้พิมพ์เอกสาร" class="form-control fw-semibold text-dark">
+            </div>
+            <div class="col-md-6 col-12">
+              <label class="form-label fw-semibold text-secondary small" for="print-input-editor">ผู้อนุมัติ (ครูผู้จัดการคลังสินค้า/ผู้ตรวจสอบ)</label>
+              <input type="text" id="print-input-editor" oninput="updatePrintNames()" placeholder="ป้อนชื่อผู้อนุมัติ" class="form-control fw-semibold text-dark">
+            </div>
+          </div>
+
+          <div class="border rounded p-4 bg-white mt-1">
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
+              <h5 class="fw-bold text-dark m-0 fs-5"><i class="fa-solid fa-list-check text-success me-2"></i>เลือกสินค้าที่จะแสดงในใบเช็คสต็อก</h5>
+              <div class="d-flex gap-2">
+                <button type="button" onclick="selectAllPrintProducts(true)" class="btn btn-sm btn-outline-primary py-1.5 px-3 fw-semibold">เลือกทั้งหมด</button>
+                <button type="button" onclick="selectAllPrintProducts(false)" class="btn btn-sm btn-outline-secondary py-1.5 px-3 fw-semibold">ล้างการเลือก</button>
+              </div>
+            </div>
+            
+            <div class="mb-3">
+              <input type="text" id="print-search-products" oninput="filterPrintSelection()" placeholder="ค้นหาสินค้าเพื่อติ๊กเลือก/ยกเลิก..." class="form-control py-2">
+            </div>
+            
+            <div class="table-responsive rounded border" style="max-height: 320px; overflow-y: auto; font-size: 14px;">
+              <table class="table table-hover align-middle mb-0 text-nowrap">
+                <thead class="table-light sticky-top text-secondary">
+                  <tr>
+                    <th style="width: 50px;" class="text-center">เลือก</th>
+                    <th style="width: 140px;">SKU</th>
+                    <th>ชื่อสินค้า</th>
+                    <th>หมวดหมู่</th>
+                    <th style="width: 100px;" class="text-end">จำนวนคงคลัง</th>
+                  </tr>
+                </thead>
+                <tbody id="print-selection-body">
+                  <!-- Dynamically populated checklist -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-1">
+            <button onclick="window.print()" class="btn btn-success px-4 py-2 fw-semibold shadow-sm">
+              <i class="fa-solid fa-print me-1"></i>สั่งพิมพ์ / บันทึก PDF
+            </button>
+            <button type="button" class="btn btn-secondary px-3" onclick="closePrintModal()">ปิดหน้าต่าง</button>
+          </div>
+        </div>
+
+        <!-- Printable Preview Content -->
+        <div class="p-4 bg-light bg-opacity-50">
+          <div id="print-area" class="bg-white p-4 p-md-5 border shadow-sm mx-auto" style="max-width: 800px; min-height: 270mm;">
+            
+            <!-- Doc Title -->
+            <div class="text-center mb-3 border-bottom border-dark border-3 pb-3">
+              <h4 class="fw-bold text-dark">ใบตรวจสอบความถูกต้องคลังสินค้า (Stock Check Sheet)</h4>
+              <p class="text-secondary small m-0 mt-1">สาขาวิชาโลจิสติกส์ วิทยาลัยเทคนิคแม่สอด</p>
+              
+              <div class="row text-start small text-secondary mt-3">
+                <div class="col-6">
+                  <p class="mb-1"><strong>ผู้พิมพ์เอกสาร/ผู้จัดทำ:</strong> <span id="print-preparer-name" class="fw-semibold text-dark">-</span></p>
+                  <p class="mb-0"><strong>วันที่ออกเอกสาร:</strong> <span id="print-date">-</span></p>
+                </div>
+                <div class="col-6 text-end">
+                  <p class="mb-1"><strong>ผู้อนุมัติ/ผู้รับรอง:</strong> <span id="print-editor-name" class="fw-semibold text-dark">-</span></p>
+                  <p class="mb-0"><strong>ประเภทเอกสาร:</strong> รายงานการตรวจสต็อกภายใน</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Doc table -->
+            <table class="w-100 text-dark mb-3 border border-dark border-collapse" style="font-size: 11px;">
+              <thead>
+                <tr class="bg-light fw-bold text-dark border-bottom border-dark">
+                  <th class="py-2 px-3 text-center border-end border-dark" style="width: 50px;">ลำดับ</th>
+                  <th class="py-2 px-3 border-end border-dark" style="width: 130px;">รหัสสินค้า (SKU)</th>
+                  <th class="py-2 px-3 border-end border-dark">ชื่อสินค้า</th>
+                  <th class="py-2 px-3 border-end border-dark" style="width: 100px;">หมวดหมู่</th>
+                  <th class="py-2 px-3 text-center border-end border-dark" style="width: 70px;">หน่วยนับ</th>
+                  <th class="py-2 px-3 text-end border-end border-dark" style="width: 90px;">จำนวนระบบ</th>
+                  <th class="py-2 px-3 text-center style-count" style="width: 120px;">ตรวจนับจริง</th>
+                </tr>
+              </thead>
+              <tbody id="print-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+
+            <!-- Signatures -->
+            <div class="mt-3 pt-2">
+              <div class="row justify-content-between text-center small text-dark g-4">
+                <div class="col-5">
+                  <div class="mb-4">ลงชื่อ............................................................ ผู้จัดทำ/ตรวจนับ</div>
+                  <div>
+                    <h6 class="fw-bold mb-1">( <span class="print-sign-preparer">-</span> )</h6>
+                    <small class="text-muted">ตำแหน่ง: เจ้าหน้าที่ตรวจสอบคลังสินค้า</small>
+                  </div>
+                </div>
+                <div class="col-5">
+                  <div class="mb-4">ลงชื่อ............................................................ ผู้อนุมัติ/ผู้ตรวจสอบ</div>
+                  <div>
+                    <h6 class="fw-bold mb-1">( <span class="print-sign-editor">-</span> )</h6>
+                    <small class="text-muted">ตำแหน่ง: ผู้ตรวจสอบสินค้าคลัง</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Edit Modal -->
+  <div id="edit-product-modal" class="hidden">
+    <div class="modal-dialog-custom">
+      <div class="modal-content-custom" style="max-width: 500px;">
+        <div class="p-4 border-bottom bg-light d-flex align-items-center justify-content-between">
+          <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+            <i class="fa-solid fa-pen-to-square text-primary"></i>
+            <span>แก้ไขข้อมูลสินค้า</span>
+          </h5>
+          <button type="button" class="btn-close" onclick="closeEditProductModal()"></button>
+        </div>
+        
+        <form id="edit-product-form" onsubmit="submitEditProduct(event)" class="p-4 row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-sku">รหัสสินค้า (SKU) (ไม่สามารถแก้ไขได้)</label>
+            <input type="text" id="edit-product-sku" readonly class="form-control bg-light text-muted font-mono border-secondary-subtle">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-name">ชื่อสินค้า <span class="text-danger">*</span></label>
+            <input type="text" id="edit-product-name" required placeholder="ชื่อเรียกในคลัง" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-category">หมวดหมู่ <span class="text-danger">*</span></label>
+            <input type="text" id="edit-product-category" required placeholder="ป้อนหมวดหมู่" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-uom">หน่วยนับ (UOM) <span class="text-danger">*</span></label>
+            <input type="text" id="edit-product-uom" required placeholder="ป้อนหน่วยนับ" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-quantity">จำนวนสินค้าเข้ามาในคลัง <span class="text-danger">*</span></label>
+            <input type="number" id="edit-product-quantity" required min="0" placeholder="0" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-description">รายละเอียด/สเปก (Description)</label>
+            <textarea id="edit-product-description" rows="3" placeholder="รายละเอียดหรือสเปกเพิ่มเติม..." class="form-control"></textarea>
+          </div>
+          
+          <div class="col-12 border-top pt-3 mt-3">
+            <div class="mb-3">
+              <label class="form-label fw-bold text-dark small" for="edit-product-user-editor">ชื่อผู้ทำการแก้ไข (ระบุตัวตน) <span class="text-danger">*</span></label>
+              <input type="text" id="edit-product-user-editor" required placeholder="ระบุชื่อจริงของผู้ป้อนแก้ไข" class="form-control border-primary bg-primary bg-opacity-10 text-dark fw-semibold">
+            </div>
+            <div class="mb-2">
+              <label class="form-label fw-bold text-dark small" for="edit-product-reason">เหตุผลในการแก้ไขข้อมูลสินค้า <span class="text-danger">*</span></label>
+              <input type="text" id="edit-product-reason" required placeholder="ระบุสาเหตุการแก้ไข เช่น ปรับสต็อกตามนับจริง" class="form-control border-warning bg-warning bg-opacity-10 text-dark">
+            </div>
+          </div>
+
+          <div class="col-12 d-flex justify-content-end gap-2 pt-2 border-top">
+            <button type="button" onclick="closeEditProductModal()" class="btn btn-secondary px-3">ยกเลิก</button>
+            <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm">บันทึกการแก้ไข</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Edit Modal -->
+  <div id="edit-supplier-modal" class="hidden">
+    <div class="modal-dialog-custom">
+      <div class="modal-content-custom" style="max-width: 500px;">
+        <div class="p-4 border-bottom bg-light d-flex align-items-center justify-content-between">
+          <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+            <i class="fa-solid fa-pen-to-square text-primary"></i>
+            <span>แก้ไขข้อมูลคู่ค้า</span>
+          </h5>
+          <button type="button" class="btn-close" onclick="closeEditSupplierModal()"></button>
+        </div>
+        
+        <form id="edit-supplier-form" onsubmit="submitEditSupplier(event)" class="p-4 row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-id">รหัสคู่ค้า (Supplier ID) (ไม่สามารถแก้ไขได้)</label>
+            <input type="text" id="edit-supplier-id" readonly class="form-control bg-light text-muted font-mono border-secondary-subtle">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-company-name">ชื่อบริษัท / ห้างหุ้นส่วน <span class="text-danger">*</span></label>
+            <input type="text" id="edit-supplier-company-name" required placeholder="ระบุชื่อบริษัท" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-tax-id">เลขผู้เสียภาษี (13 หลัก) <span class="text-danger">*</span></label>
+            <input type="text" id="edit-supplier-tax-id" required pattern="\d{13}" maxLength="13" placeholder="ตัวเลข 13 หลัก" class="form-control font-mono">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-contact-person">ชื่อผู้ติดต่อหลัก</label>
+            <input type="text" id="edit-supplier-contact-person" placeholder="ผู้จัดการขาย / เซลส์" class="form-control">
+          </div>
+          <div class="row g-2 p-0 m-0">
+            <div class="col-6 ps-0">
+              <label class="form-label fw-semibold text-secondary small" for="edit-supplier-phone">เบอร์โทรศัพท์ <span class="text-danger">*</span></label>
+              <input type="tel" id="edit-supplier-phone" required placeholder="เบอร์โทรตรง" class="form-control">
+            </div>
+            <div class="col-6 pe-0">
+              <label class="form-label fw-semibold text-secondary small" for="edit-supplier-email">อีเมล</label>
+              <input type="email" id="edit-supplier-email" placeholder="email@domain.com" class="form-control">
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-registered-address">ที่อยู่จดทะเบียน <span class="text-danger">*</span></label>
+            <textarea id="edit-supplier-registered-address" required rows="2" placeholder="ที่อยู่ในการออกใบกำกับ..." class="form-control"></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-supplier-mailing-address">ที่อยู่จัดส่งเอกสาร</label>
+            <textarea id="edit-supplier-mailing-address" rows="2" placeholder="ที่อยู่ในการจัดส่งสินค้า/เอกสาร..." class="form-control"></textarea>
+          </div>
+          
+          <div class="col-12 border-top pt-3 mt-3">
+            <div class="mb-3">
+              <label class="form-label fw-bold text-dark small" for="edit-supplier-user-editor">ชื่อผู้ทำการแก้ไข (ระบุตัวตน) <span class="text-danger">*</span></label>
+              <input type="text" id="edit-supplier-user-editor" required placeholder="ระบุชื่อผู้บันทึกแก้ไข" class="form-control border-primary bg-primary bg-opacity-10 text-dark fw-semibold">
+            </div>
+            <div class="mb-2">
+              <label class="form-label fw-bold text-dark small" for="edit-supplier-reason">เหตุผลในการแก้ไขข้อมูลคู่ค้า <span class="text-danger">*</span></label>
+              <input type="text" id="edit-supplier-reason" required placeholder="ระบุสาเหตุการแก้ไข..." class="form-control border-warning bg-warning bg-opacity-10 text-dark">
+            </div>
+          </div>
+
+          <div class="col-12 d-flex justify-content-end gap-2 pt-2 border-top">
+            <button type="button" onclick="closeEditSupplierModal()" class="btn btn-secondary px-3">ยกเลิก</button>
+            <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm">บันทึกการแก้ไข</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
