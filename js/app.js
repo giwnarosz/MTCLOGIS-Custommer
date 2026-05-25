@@ -462,50 +462,71 @@ function changeLogsPage(pageNum) {
 
 // Filters
 function filterProducts() {
-  const query = document.getElementById('search-products').value.toLowerCase().trim();
+  const queryInput = document.getElementById('search-products');
+  const query = queryInput ? queryInput.value.toLowerCase().trim() : '';
   if (!query) {
     renderProducts(null);
     return;
   }
-  const filtered = appState.products.filter(p => 
-    p.SKU.toLowerCase().includes(query) || 
-    p.Name.toLowerCase().includes(query) ||
-    p.Category.toLowerCase().includes(query) ||
-    (p.Creator && p.Creator.toLowerCase().includes(query))
-  );
+  const filtered = appState.products.filter(p => {
+    const sku = String(p.SKU || '').toLowerCase();
+    const name = String(p.Name || '').toLowerCase();
+    const cat = String(p.Category || '').toLowerCase();
+    const creator = String(p.Creator || '').toLowerCase();
+    return sku.includes(query) || name.includes(query) || cat.includes(query) || creator.includes(query);
+  });
   renderProducts(filtered);
 }
 
 function filterSuppliers() {
-  const query = document.getElementById('search-suppliers').value.toLowerCase().trim();
+  const queryInput = document.getElementById('search-suppliers');
+  const query = queryInput ? queryInput.value.toLowerCase().trim() : '';
   if (!query) {
     renderSuppliers();
     return;
   }
-  const filtered = appState.suppliers.filter(s => 
-    s.SupplierID.toLowerCase().includes(query) || 
-    s.CompanyName.toLowerCase().includes(query) ||
-    s.TaxID.includes(query) ||
-    (s.Phone && s.Phone.toLowerCase().includes(query))
-  );
+  const filtered = appState.suppliers.filter(s => {
+    const id = String(s.SupplierID || '').toLowerCase();
+    const name = String(s.CompanyName || '').toLowerCase();
+    const tax = String(s.TaxID || '').toLowerCase();
+    const phone = String(s.Phone || '').toLowerCase();
+    const contact = String(s.ContactPerson || '').toLowerCase();
+    const creator = String(s.Creator || '').toLowerCase();
+    const email = String(s.Email || '').toLowerCase();
+    return id.includes(query) || 
+           name.includes(query) || 
+           tax.includes(query) || 
+           phone.includes(query) || 
+           contact.includes(query) || 
+           creator.includes(query) || 
+           email.includes(query);
+  });
   renderSuppliers(filtered);
 }
 
 function filterLogs() {
-  const query = document.getElementById('search-logs').value.toLowerCase().trim();
+  const queryInput = document.getElementById('search-logs');
+  const query = queryInput ? queryInput.value.toLowerCase().trim() : '';
   if (!query) {
     renderLogs(null);
     return;
   }
-  const filtered = appState.auditLogs.filter(l => 
-    l.PrimaryKey.toLowerCase().includes(query) || 
-    l.RecordType.toLowerCase().includes(query) ||
-    (l.Details && l.Details.toLowerCase().includes(query)) ||
-    (l.Reason && l.Reason.toLowerCase().includes(query)) ||
-    (l.Creator && l.Creator.toLowerCase().includes(query)) ||
-    (l.Editor && l.Editor.toLowerCase().includes(query)) ||
-    (l.Preparer && l.Preparer.toLowerCase().includes(query))
-  );
+  const filtered = appState.auditLogs.filter(l => {
+    const key = String(l.PrimaryKey || '').toLowerCase();
+    const type = String(l.RecordType || '').toLowerCase();
+    const details = String(l.Details || '').toLowerCase();
+    const reason = String(l.Reason || '').toLowerCase();
+    const creator = String(l.Creator || '').toLowerCase();
+    const editor = String(l.Editor || '').toLowerCase();
+    const preparer = String(l.Preparer || '').toLowerCase();
+    return key.includes(query) || 
+           type.includes(query) || 
+           details.includes(query) || 
+           reason.includes(query) || 
+           creator.includes(query) || 
+           editor.includes(query) || 
+           preparer.includes(query);
+  });
   renderLogs(filtered);
 }
 
