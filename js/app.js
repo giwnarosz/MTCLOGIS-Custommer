@@ -9,7 +9,13 @@ let appState = {
   suppliers: [],
   auditLogs: [],
   currentProductEdit: null, // SKU if editing
-  currentSupplierEdit: null // SupplierID if editing
+  currentSupplierEdit: null, // SupplierID if editing
+  productsCurrentPage: 1,
+  productsPerPage: 10,
+  productsFilteredList: null,
+  auditLogsCurrentPage: 1,
+  auditLogsPerPage: 10,
+  auditLogsFilteredList: null
 };
 
 // Document Ready
@@ -137,21 +143,27 @@ function showLoadingAll(isLoading) {
 // Tab Switcher
 function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('aside nav button').forEach(el => {
+  document.querySelectorAll('.nav-tab-btn').forEach(el => {
     el.classList.remove('active-tab');
     el.classList.add('text-slate-300');
   });
 
-  document.getElementById(`tab-${tabId}`).classList.add('active');
-  document.getElementById(`tab-btn-${tabId}`).classList.add('active-tab');
-  document.getElementById(`tab-btn-${tabId}`).classList.remove('text-slate-300');
+  const targetTab = document.getElementById(`tab-${tabId}`);
+  if (targetTab) targetTab.classList.add('active');
+  
+  const targetBtn = document.getElementById(`tab-btn-${tabId}`);
+  if (targetBtn) {
+    targetBtn.classList.add('active-tab');
+    targetBtn.classList.remove('text-slate-300');
+  }
 
   const titles = {
     'products': 'จัดการสินค้า (Products)',
     'suppliers': 'จัดการคู่ค้า (Suppliers)',
     'audit-logs': 'ประวัติการทำงาน (Audit Logs)'
   };
-  document.getElementById('page-title').innerText = titles[tabId];
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle) pageTitle.innerText = titles[tabId];
 }
 
 // Helper format functions
@@ -194,15 +206,44 @@ function syncMailingAddress() {
 
 // Rendering Lists
 function renderProducts(filteredList = null) {
-  const list = filteredList || appState.products;
+  if (filteredList !== null) {
+    appState.productsFilteredList = filteredList;
+    appState.productsCurrentPage = 1;
+  } else {
+    const queryInput = document.getElementById('search-products');
+    const query = queryInput ? queryInput.value.trim() : '';
+    if (!query) {
+      appState.productsFilteredList = null;
+    }
+  }
+
+  const list = appState.productsFilteredList || appState.products;
   const tbody = document.getElementById('product-table-body');
   
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลสินค้า</td></tr>`;
+    const info = document.getElementById('product-pagination-info');
+    const listContainer = document.getElementById('product-pagination-list');
+    if (info) info.innerText = 'แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ';
+    if (listContainer) listContainer.innerHTML = '';
     return;
   }
   
-  tbody.innerHTML = list.map(item => `
+  const totalItems = list.length;
+  const totalPages = Math.ceil(totalItems / appState.productsPerPage);
+  
+  if (appState.productsCurrentPage > totalPages) {
+    appState.productsCurrentPage = totalPages;
+  }
+  if (appState.productsCurrentPage < 1) {
+    appState.productsCurrentPage = 1;
+  }
+
+  const startIdx = (appState.productsCurrentPage - 1) * appState.productsPerPage;
+  const endIdx = Math.min(startIdx + appState.productsPerPage, totalItems);
+  const pageList = list.slice(startIdx, endIdx);
+
+  tbody.innerHTML = pageList.map(item => `
     <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
       <td class="py-3 px-4 font-mono text-xs font-semibold text-blue-600">${item.SKU}</td>
       <td class="py-3 px-4 font-medium text-slate-800">${item.Name}</td>
@@ -221,6 +262,55 @@ function renderProducts(filteredList = null) {
       </td>
     </tr>
   `).join('');
+
+  renderProductPagination(totalItems, totalPages);
+}
+
+function renderProductPagination(totalItems, totalPages) {
+  const info = document.getElementById('product-pagination-info');
+  const listContainer = document.getElementById('product-pagination-list');
+  if (!info || !listContainer) return;
+
+  const start = (appState.productsCurrentPage - 1) * appState.productsPerPage + 1;
+  const end = Math.min(start + appState.productsPerPage - 1, totalItems);
+  
+  info.innerText = `แสดงข้อมูล ${start} - ${end} จากทั้งหมด ${totalItems} รายการ`;
+
+  let paginationHtml = '';
+  
+  const prevDisabled = appState.productsCurrentPage === 1 ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${prevDisabled}">
+      <button class="page-link" onclick="changeProductPage(${appState.productsCurrentPage - 1})" aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </button>
+    </li>
+  `;
+
+  for (let i = 1; i <= totalPages; i++) {
+    const activeClass = i === appState.productsCurrentPage ? 'active' : '';
+    paginationHtml += `
+      <li class="page-item ${activeClass}">
+        <button class="page-link" onclick="changeProductPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  const nextDisabled = appState.productsCurrentPage === totalPages ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${nextDisabled}">
+      <button class="page-link" onclick="changeProductPage(${appState.productsCurrentPage + 1})" aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </button>
+    </li>
+  `;
+
+  listContainer.innerHTML = paginationHtml;
+}
+
+function changeProductPage(pageNum) {
+  appState.productsCurrentPage = pageNum;
+  renderProducts();
 }
 
 function renderSuppliers(filteredList = null) {
@@ -228,7 +318,7 @@ function renderSuppliers(filteredList = null) {
   const tbody = document.getElementById('supplier-table-body');
   
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลคู่ค้า</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลคู่ค้า</td></tr>`;
     return;
   }
   
@@ -237,13 +327,18 @@ function renderSuppliers(filteredList = null) {
       <td class="py-3 px-4 font-mono text-xs font-semibold text-blue-600">${item.SupplierID}</td>
       <td class="py-3 px-4 font-medium text-slate-800">${item.CompanyName}</td>
       <td class="py-3 px-4 font-mono text-xs text-slate-600">${item.TaxID}</td>
+      <td class="py-3 px-4 text-xs text-slate-600">${item.ContactPerson || '-'}</td>
       <td class="py-3 px-4 text-xs text-slate-600">${item.Phone}</td>
+      <td class="py-3 px-4 text-xs text-slate-600">${item.Email || '-'}</td>
+      <td class="py-3 px-4 text-xs text-slate-600 text-wrap" style="max-width: 200px; min-width: 150px;">${item.RegisteredAddress || '-'}</td>
+      <td class="py-3 px-4 text-xs text-slate-600 text-wrap" style="max-width: 200px; min-width: 150px;">${item.MailingAddress || '-'}</td>
+      <td class="py-3 px-4 text-xs text-slate-600">${item.Creator || '-'}</td>
       <td class="py-3 px-4 text-center">
-        <div class="flex items-center justify-center gap-1.5">
-          <button onclick="startEditSupplier('${item.SupplierID}')" class="p-1 px-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs transition-all font-medium">
+        <div class="d-flex align-items-center justify-content-center gap-1.5">
+          <button onclick="startEditSupplier('${item.SupplierID}')" class="p-1 px-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs transition-all font-medium border-0">
             <i class="fa-solid fa-pen"></i> แก้ไข
           </button>
-          <button onclick="deleteSupplier('${item.SupplierID}')" class="p-1 px-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs transition-all font-medium">
+          <button onclick="deleteSupplier('${item.SupplierID}')" class="p-1 px-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs transition-all font-medium border-0">
             <i class="fa-solid fa-trash"></i> ลบ
           </button>
         </div>
@@ -253,17 +348,46 @@ function renderSuppliers(filteredList = null) {
 }
 
 function renderLogs(filteredList = null) {
-  const list = filteredList || appState.auditLogs;
+  if (filteredList !== null) {
+    appState.auditLogsFilteredList = filteredList;
+    appState.auditLogsCurrentPage = 1;
+  } else {
+    const queryInput = document.getElementById('search-logs');
+    const query = queryInput ? queryInput.value.trim() : '';
+    if (!query) {
+      appState.auditLogsFilteredList = null;
+    }
+  }
+
+  const list = appState.auditLogsFilteredList || appState.auditLogs;
   const tbody = document.getElementById('logs-table-body');
   
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 font-xs">ไม่พบประวัติการทำรายการ</td></tr>`;
+    const info = document.getElementById('logs-pagination-info');
+    const listContainer = document.getElementById('logs-pagination-list');
+    if (info) info.innerText = 'แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ';
+    if (listContainer) listContainer.innerHTML = '';
     return;
   }
   
   const sorted = [...list].sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
   
-  tbody.innerHTML = sorted.map(item => {
+  const totalItems = sorted.length;
+  const totalPages = Math.ceil(totalItems / appState.auditLogsPerPage);
+  
+  if (appState.auditLogsCurrentPage > totalPages) {
+    appState.auditLogsCurrentPage = totalPages;
+  }
+  if (appState.auditLogsCurrentPage < 1) {
+    appState.auditLogsCurrentPage = 1;
+  }
+
+  const startIdx = (appState.auditLogsCurrentPage - 1) * appState.auditLogsPerPage;
+  const endIdx = Math.min(startIdx + appState.auditLogsPerPage, totalItems);
+  const pageList = sorted.slice(startIdx, endIdx);
+  
+  tbody.innerHTML = pageList.map(item => {
     let badgeClass = 'bg-slate-100 text-slate-700';
     if (item.ActionType === 'ADD') badgeClass = 'bg-emerald-100 text-emerald-800';
     else if (item.ActionType === 'EDIT') badgeClass = 'bg-blue-100 text-blue-800';
@@ -285,19 +409,69 @@ function renderLogs(filteredList = null) {
       </tr>
     `;
   }).join('');
+
+  renderLogsPagination(totalItems, totalPages);
+}
+
+function renderLogsPagination(totalItems, totalPages) {
+  const info = document.getElementById('logs-pagination-info');
+  const listContainer = document.getElementById('logs-pagination-list');
+  if (!info || !listContainer) return;
+
+  const start = (appState.auditLogsCurrentPage - 1) * appState.auditLogsPerPage + 1;
+  const end = Math.min(start + appState.auditLogsPerPage - 1, totalItems);
+  
+  info.innerText = `แสดงข้อมูล ${start} - ${end} จากทั้งหมด ${totalItems} รายการ`;
+
+  let paginationHtml = '';
+  
+  const prevDisabled = appState.auditLogsCurrentPage === 1 ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${prevDisabled}">
+      <button class="page-link" onclick="changeLogsPage(${appState.auditLogsCurrentPage - 1})" aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </button>
+    </li>
+  `;
+
+  for (let i = 1; i <= totalPages; i++) {
+    const activeClass = i === appState.auditLogsCurrentPage ? 'active' : '';
+    paginationHtml += `
+      <li class="page-item ${activeClass}">
+        <button class="page-link" onclick="changeLogsPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  const nextDisabled = appState.auditLogsCurrentPage === totalPages ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${nextDisabled}">
+      <button class="page-link" onclick="changeLogsPage(${appState.auditLogsCurrentPage + 1})" aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </button>
+    </li>
+  `;
+
+  listContainer.innerHTML = paginationHtml;
+}
+
+function changeLogsPage(pageNum) {
+  appState.auditLogsCurrentPage = pageNum;
+  renderLogs();
 }
 
 // Filters
 function filterProducts() {
   const query = document.getElementById('search-products').value.toLowerCase().trim();
   if (!query) {
-    renderProducts();
+    renderProducts(null);
     return;
   }
   const filtered = appState.products.filter(p => 
     p.SKU.toLowerCase().includes(query) || 
     p.Name.toLowerCase().includes(query) ||
-    p.Category.toLowerCase().includes(query)
+    p.Category.toLowerCase().includes(query) ||
+    (p.Creator && p.Creator.toLowerCase().includes(query))
   );
   renderProducts(filtered);
 }
@@ -311,7 +485,8 @@ function filterSuppliers() {
   const filtered = appState.suppliers.filter(s => 
     s.SupplierID.toLowerCase().includes(query) || 
     s.CompanyName.toLowerCase().includes(query) ||
-    s.TaxID.includes(query)
+    s.TaxID.includes(query) ||
+    (s.Phone && s.Phone.toLowerCase().includes(query))
   );
   renderSuppliers(filtered);
 }
@@ -319,14 +494,17 @@ function filterSuppliers() {
 function filterLogs() {
   const query = document.getElementById('search-logs').value.toLowerCase().trim();
   if (!query) {
-    renderLogs();
+    renderLogs(null);
     return;
   }
   const filtered = appState.auditLogs.filter(l => 
     l.PrimaryKey.toLowerCase().includes(query) || 
     l.RecordType.toLowerCase().includes(query) ||
     (l.Details && l.Details.toLowerCase().includes(query)) ||
-    (l.Reason && l.Reason.toLowerCase().includes(query))
+    (l.Reason && l.Reason.toLowerCase().includes(query)) ||
+    (l.Creator && l.Creator.toLowerCase().includes(query)) ||
+    (l.Editor && l.Editor.toLowerCase().includes(query)) ||
+    (l.Preparer && l.Preparer.toLowerCase().includes(query))
   );
   renderLogs(filtered);
 }
@@ -918,5 +1096,176 @@ function closePrintModal() {
 function togglePrintCostColumn() {
   // Cost column functionality is deprecated since we replaced price/cost with Quantity,
   // but we keep the method stub to prevent errors.
+}
+
+// Print Supplier Sheet Module
+function openPrintSupplierModal() {
+  if (appState.suppliers.length === 0) {
+    Swal.fire('ข้อผิดพลาด', 'ไม่พบคู่ค้าใด ๆ ในระบบที่จะพิมพ์ใบตรวจสอบ', 'warning');
+    return;
+  }
+
+  document.getElementById('print-sup-input-preparer').value = appState.editor || 'สมศรี (ผู้แก้ไข)';
+  document.getElementById('print-sup-input-editor').value = 'นายปาณชัย พรมภักดี';
+  
+  const dateStr = new Date().toLocaleDateString('th-TH', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  document.getElementById('print-sup-date').innerText = dateStr;
+
+  updatePrintSupplierNames();
+
+  // Clear search field
+  const searchInput = document.getElementById('print-sup-search-suppliers');
+  if (searchInput) searchInput.value = '';
+
+  // Initialize print selections (all suppliers selected by default)
+  appState.printSupplierSelections = appState.suppliers.map(item => item.SupplierID);
+
+  // Render selection checklist UI
+  renderPrintSupplierSelectionList();
+
+  // Render printable preview area
+  renderPrintSupplierPreview();
+
+  const modal = document.getElementById('print-supplier-modal');
+  modal.classList.remove('hidden');
+  setTimeout(() => {
+    modal.firstElementChild.classList.remove('scale-95');
+    modal.firstElementChild.classList.add('scale-100');
+  }, 10);
+}
+
+function renderPrintSupplierSelectionList() {
+  const tbody = document.getElementById('print-sup-selection-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = appState.suppliers.map(item => {
+    const isChecked = appState.printSupplierSelections.includes(item.SupplierID);
+    return `
+      <tr id="print-sup-select-row-${item.SupplierID}">
+        <td class="text-center">
+          <input type="checkbox" class="form-check-input form-check-input-lg" id="print-sup-chk-${item.SupplierID}" ${isChecked ? 'checked' : ''} onchange="togglePrintSupplier('${item.SupplierID}', this.checked)">
+        </td>
+        <td class="font-mono">${item.SupplierID}</td>
+        <td class="fw-semibold text-dark">${item.CompanyName}</td>
+        <td class="font-mono">${item.TaxID}</td>
+        <td>${item.Phone}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function togglePrintSupplier(supplierId, isChecked) {
+  if (!appState.printSupplierSelections) {
+    appState.printSupplierSelections = [];
+  }
+
+  if (isChecked) {
+    if (!appState.printSupplierSelections.includes(supplierId)) {
+      appState.printSupplierSelections.push(supplierId);
+    }
+  } else {
+    appState.printSupplierSelections = appState.printSupplierSelections.filter(s => s !== supplierId);
+  }
+
+  renderPrintSupplierPreview();
+}
+
+function selectAllPrintSuppliers(shouldSelectAll) {
+  if (shouldSelectAll) {
+    appState.printSupplierSelections = appState.suppliers.map(item => item.SupplierID);
+  } else {
+    appState.printSupplierSelections = [];
+  }
+
+  // Update checkboxes in the list
+  appState.suppliers.forEach(item => {
+    const chk = document.getElementById(`print-sup-chk-${item.SupplierID}`);
+    if (chk) {
+      chk.checked = shouldSelectAll;
+    }
+  });
+
+  renderPrintSupplierPreview();
+}
+
+// Filter the supplier checklist as typing
+function filterPrintSupplierSelection() {
+  const query = document.getElementById('print-sup-search-suppliers').value.toLowerCase().trim();
+  
+  appState.suppliers.forEach(item => {
+    const row = document.getElementById(`print-sup-select-row-${item.SupplierID}`);
+    if (!row) return;
+
+    const matchesID = item.SupplierID.toLowerCase().includes(query);
+    const matchesName = item.CompanyName.toLowerCase().includes(query);
+    const matchesTaxID = item.TaxID.toLowerCase().includes(query);
+    const matchesPhone = (item.Phone || '').toLowerCase().includes(query);
+
+    if (matchesID || matchesName || matchesTaxID || matchesPhone) {
+      row.classList.remove('d-none');
+    } else {
+      row.classList.add('d-none');
+    }
+  });
+}
+
+function renderPrintSupplierPreview() {
+  const tbody = document.getElementById('print-sup-table-body');
+  if (!tbody) return;
+
+  const selectedSuppliers = appState.suppliers.filter(item => 
+    appState.printSupplierSelections && appState.printSupplierSelections.includes(item.SupplierID)
+  );
+
+  if (selectedSuppliers.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center py-4 text-muted">
+          <i class="fa-solid fa-triangle-exclamation me-1"></i> ไม่มีคู่ค้าที่เลือกสำหรับสั่งพิมพ์
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = selectedSuppliers.map((item, index) => `
+    <tr class="border-bottom border-secondary-subtle">
+      <td class="py-2 px-3 border-end border-secondary-subtle text-center">${index + 1}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle font-mono">${item.SupplierID}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle fw-semibold text-dark">${item.CompanyName}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle font-mono">${item.TaxID}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle">${item.ContactPerson || '-'}</td>
+      <td class="py-2 px-3 border-end border-secondary-subtle">${item.Phone}</td>
+      <td class="py-2 px-3 text-center text-secondary opacity-50">
+        [ &nbsp; ] ถูกต้อง &nbsp; [ &nbsp; ] แก้ไข
+      </td>
+    </tr>
+  `).join('');
+}
+
+function updatePrintSupplierNames() {
+  const prepVal = document.getElementById('print-sup-input-preparer').value.trim() || '-';
+  const editVal = document.getElementById('print-sup-input-editor').value.trim() || '-';
+  
+  document.getElementById('print-sup-preparer-name').innerText = prepVal;
+  document.getElementById('print-sup-editor-name').innerText = editVal;
+  
+  document.querySelectorAll('.print-sup-sign-preparer').forEach(el => el.innerText = prepVal);
+  document.querySelectorAll('.print-sup-sign-editor').forEach(el => el.innerText = editVal);
+}
+
+function closePrintSupplierModal() {
+  const modal = document.getElementById('print-supplier-modal');
+  modal.firstElementChild.classList.remove('scale-100');
+  modal.firstElementChild.classList.add('scale-95');
+  setTimeout(() => {
+    modal.classList.add('hidden');
+  }, 150);
 }
 
