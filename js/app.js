@@ -1,5 +1,5 @@
-// กำหนด Google Apps Script Web App URL ที่นี่ (ฝังไว้เพื่อให้ง่ายต่อการเรียนการสอนนักเรียน ปวส.)
-const API_URL = "https://script.google.com/macros/s/AKfycbz0Y006gjERLnOonoS90k-ACDEBqgjmmfobzDyLkdvXkl_FhGHYcMf_vzaXikzAVgor/exec"; // <-- แก้ไข URL นี้เป็น URL ของ Web App ที่คุณ Deploy ไว้
+// กำหนด Google Apps Script Web App URL ที่นี่
+const API_URL = "https://script.google.com/macros/s/AKfycbzl5A6V4cJzjmO-M_xKc5SHjvxZLJa8Z7U8hArwxiLBCuTLoDTFRhERS60UMC3dPYJ-/exec";
 
 // App State
 let appState = {
@@ -13,9 +13,18 @@ let appState = {
   productsCurrentPage: 1,
   productsPerPage: 10,
   productsFilteredList: null,
+  suppliersCurrentPage: 1,
+  suppliersPerPage: 10,
+  suppliersFilteredList: null,
   auditLogsCurrentPage: 1,
   auditLogsPerPage: 10,
-  auditLogsFilteredList: null
+  auditLogsFilteredList: null,
+  printSelections: [],
+  printProductFilteredList: null,
+  printProductCurrentPage: 1,
+  printProductPerPage: 10,
+  printSupplierSelections: [],
+  printSupplierFilteredList: null
 };
 
 // Document Ready
@@ -40,10 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // แสดงข้อความแนะนำในตารางข้อมูล
-    const emptyRowHtml = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">กรุณาตั้งค่า API_URL ในไฟล์ js/app.js เพื่อเริ่มระบบคลังสินค้า</td></tr>`;
+    const emptyRowHtml = `<tr><td colspan="11" class="text-center py-8 text-slate-400 text-xs">กรุณาตั้งค่า API_URL ในไฟล์ js/app.js เพื่อเริ่มระบบคลังสินค้า</td></tr>`;
     document.getElementById('product-table-body').innerHTML = emptyRowHtml;
     document.getElementById('supplier-table-body').innerHTML = emptyRowHtml;
-    document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 text-xs">กรุณาตั้งค่า API_URL ในไฟล์ js/app.js เพื่อเริ่มระบบคลังสินค้า</td></tr>`;
+    document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400 text-xs">กรุณาตั้งค่า API_URL ในไฟล์ js/app.js เพื่อเริ่มระบบคลังสินค้า</td></tr>`;
   } else {
     showApiWarning(false);
     appState.apiUrl = API_URL;
@@ -103,7 +112,7 @@ async function fetchAuditLogs() {
   
   document.getElementById('logs-table-body').innerHTML = `
     <tr>
-      <td colspan="9" class="text-center py-8 text-slate-400">กำลังโหลดประวัติใหม่...</td>
+      <td colspan="10" class="text-center py-8 text-slate-400">กำลังโหลดประวัติใหม่...</td>
     </tr>
   `;
   
@@ -138,6 +147,17 @@ function showLoadingAll(isLoading) {
     document.getElementById('product-table-body').innerHTML = loadingHtml;
     document.getElementById('supplier-table-body').innerHTML = loadingHtml;
     document.getElementById('logs-table-body').innerHTML = loadingHtml;
+  }
+}
+
+// Dismiss mobile offcanvas programmatically
+function dismissOffcanvas() {
+  const offcanvasEl = document.getElementById('topNavbarMenu');
+  if (offcanvasEl) {
+    const bsOffcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
+    if (bsOffcanvas) {
+      bsOffcanvas.hide();
+    }
   }
 }
 
@@ -177,8 +197,6 @@ function formatDate(isoString) {
     return isoString;
   }
 }
-
-// Auto-generation Helpers (Removed for teaching purposes, SKU and Supplier ID are manually input by students)
 
 // Address Synchronization for Supplier Form
 function toggleMailingAddressSync() {
@@ -222,7 +240,7 @@ function renderProducts(filteredList = null) {
   const tbody = document.getElementById('product-table-body');
   
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลสินค้า</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลสินค้า</td></tr>`;
     const info = document.getElementById('product-pagination-info');
     const listContainer = document.getElementById('product-pagination-list');
     if (info) info.innerText = 'แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ';
@@ -247,17 +265,21 @@ function renderProducts(filteredList = null) {
   tbody.innerHTML = pageList.map(item => `
     <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
       <td class="py-3 px-4 font-mono text-xs font-semibold text-blue-600">${item.SKU}</td>
+      <td class="py-3 px-4 font-mono text-xs text-slate-700">${item.Barcode || '-'}</td>
+      <td class="py-3 px-4 text-xs text-slate-500 font-mono">${item.Zone || '-'}</td>
       <td class="py-3 px-4 font-medium text-slate-800">${item.Name}</td>
       <td class="py-3 px-4 text-xs text-slate-500">${item.Category}</td>
-      <td class="py-3 px-4 text-xs text-slate-500 font-mono">${item.SupplierID || '-'}</td>
       <td class="py-3 px-4 text-xs text-slate-600">${item.UOM}</td>
-      <td class="py-3 px-4 text-right font-semibold text-blue-800">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
+      <td class="py-3 px-4 text-xs text-slate-600 text-wrap" style="max-width: 150px;">${item.Description || '-'}</td>
+      <td class="py-3 px-4 text-end font-semibold text-blue-800">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
+      <td class="py-3 px-4 text-xs text-slate-500 font-mono">${item.SupplierID || '-'}</td>
+      <td class="py-3 px-4 text-xs text-slate-500">${formatDate(item.DateAdded)}</td>
       <td class="py-3 px-4 text-center">
-        <div class="flex items-center justify-center gap-1.5">
-          <button onclick="startEditProduct('${item.SKU}')" class="p-1 px-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs transition-all font-medium">
+        <div class="d-flex align-items-center justify-content-center gap-1.5">
+          <button onclick="startEditProduct('${item.SKU}')" class="p-1 px-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs transition-all font-medium border-0">
             <i class="fa-solid fa-pen"></i> แก้ไข
           </button>
-          <button onclick="deleteProduct('${item.SKU}')" class="p-1 px-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs transition-all font-medium">
+          <button onclick="deleteProduct('${item.SKU}')" class="p-1 px-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs transition-all font-medium border-0">
             <i class="fa-solid fa-trash"></i> ลบ
           </button>
         </div>
@@ -289,11 +311,39 @@ function renderProductPagination(totalItems, totalPages) {
     </li>
   `;
 
-  for (let i = 1; i <= totalPages; i++) {
+  let startPage = Math.max(1, appState.productsCurrentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+
+  if (startPage > 1) {
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeProductPage(1)">1</button>
+      </li>
+    `;
+    if (startPage > 2) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
     const activeClass = i === appState.productsCurrentPage ? 'active' : '';
     paginationHtml += `
       <li class="page-item ${activeClass}">
         <button class="page-link" onclick="changeProductPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeProductPage(${totalPages})">${totalPages}</button>
       </li>
     `;
   }
@@ -328,15 +378,44 @@ function populateSupplierDropdowns() {
 }
 
 function renderSuppliers(filteredList = null) {
-  const list = filteredList || appState.suppliers;
+  if (filteredList !== null) {
+    appState.suppliersFilteredList = filteredList;
+    appState.suppliersCurrentPage = 1;
+  } else {
+    const queryInput = document.getElementById('search-suppliers');
+    const query = queryInput ? queryInput.value.trim() : '';
+    if (!query) {
+      appState.suppliersFilteredList = null;
+    }
+  }
+
+  const list = appState.suppliersFilteredList || appState.suppliers;
   const tbody = document.getElementById('supplier-table-body');
   
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400 text-xs">ไม่พบข้อมูลคู่ค้า</td></tr>`;
+    const info = document.getElementById('supplier-pagination-info');
+    const listContainer = document.getElementById('supplier-pagination-list');
+    if (info) info.innerText = 'แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ';
+    if (listContainer) listContainer.innerHTML = '';
     return;
   }
   
-  tbody.innerHTML = list.map(item => `
+  const totalItems = list.length;
+  const totalPages = Math.ceil(totalItems / appState.suppliersPerPage);
+  
+  if (appState.suppliersCurrentPage > totalPages) {
+    appState.suppliersCurrentPage = totalPages;
+  }
+  if (appState.suppliersCurrentPage < 1) {
+    appState.suppliersCurrentPage = 1;
+  }
+
+  const startIdx = (appState.suppliersCurrentPage - 1) * appState.suppliersPerPage;
+  const endIdx = Math.min(startIdx + appState.suppliersPerPage, totalItems);
+  const pageList = list.slice(startIdx, endIdx);
+
+  tbody.innerHTML = pageList.map(item => `
     <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
       <td class="py-3 px-4 font-mono text-xs font-semibold text-blue-600">${item.SupplierID}</td>
       <td class="py-3 px-4 font-medium text-slate-800">${item.CompanyName}</td>
@@ -359,6 +438,83 @@ function renderSuppliers(filteredList = null) {
       </td>
     </tr>
   `).join('');
+
+  renderSupplierPagination(totalItems, totalPages);
+}
+
+function renderSupplierPagination(totalItems, totalPages) {
+  const info = document.getElementById('supplier-pagination-info');
+  const listContainer = document.getElementById('supplier-pagination-list');
+  if (!info || !listContainer) return;
+
+  const start = (appState.suppliersCurrentPage - 1) * appState.suppliersPerPage + 1;
+  const end = Math.min(start + appState.suppliersPerPage - 1, totalItems);
+  
+  info.innerText = `แสดงข้อมูล ${start} - ${end} จากทั้งหมด ${totalItems} รายการ`;
+
+  let paginationHtml = '';
+  
+  const prevDisabled = appState.suppliersCurrentPage === 1 ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${prevDisabled}">
+      <button class="page-link" onclick="changeSupplierPage(${appState.suppliersCurrentPage - 1})" aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </button>
+    </li>
+  `;
+
+  let startPage = Math.max(1, appState.suppliersCurrentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+
+  if (startPage > 1) {
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeSupplierPage(1)">1</button>
+      </li>
+    `;
+    if (startPage > 2) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    const activeClass = i === appState.suppliersCurrentPage ? 'active' : '';
+    paginationHtml += `
+      <li class="page-item ${activeClass}">
+        <button class="page-link" onclick="changeSupplierPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeSupplierPage(${totalPages})">${totalPages}</button>
+      </li>
+    `;
+  }
+
+  const nextDisabled = appState.suppliersCurrentPage === totalPages ? 'disabled' : '';
+  paginationHtml += `
+    <li class="page-item ${nextDisabled}">
+      <button class="page-link" onclick="changeSupplierPage(${appState.suppliersCurrentPage + 1})" aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </button>
+    </li>
+  `;
+
+  listContainer.innerHTML = paginationHtml;
+}
+
+function changeSupplierPage(pageNum) {
+  appState.suppliersCurrentPage = pageNum;
+  renderSuppliers();
 }
 
 function renderLogs(filteredList = null) {
@@ -377,7 +533,7 @@ function renderLogs(filteredList = null) {
   const tbody = document.getElementById('logs-table-body');
   
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 font-xs">ไม่พบประวัติการทำรายการ</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400 text-xs">ไม่พบประวัติการทำรายการ</td></tr>`;
     const info = document.getElementById('logs-pagination-info');
     const listContainer = document.getElementById('logs-pagination-list');
     if (info) info.innerText = 'แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ';
@@ -449,11 +605,39 @@ function renderLogsPagination(totalItems, totalPages) {
     </li>
   `;
 
-  for (let i = 1; i <= totalPages; i++) {
+  let startPage = Math.max(1, appState.auditLogsCurrentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+
+  if (startPage > 1) {
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeLogsPage(1)">1</button>
+      </li>
+    `;
+    if (startPage > 2) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
     const activeClass = i === appState.auditLogsCurrentPage ? 'active' : '';
     paginationHtml += `
       <li class="page-item ${activeClass}">
         <button class="page-link" onclick="changeLogsPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changeLogsPage(${totalPages})">${totalPages}</button>
       </li>
     `;
   }
@@ -487,8 +671,10 @@ function filterProducts() {
     const sku = String(p.SKU || '').toLowerCase();
     const name = String(p.Name || '').toLowerCase();
     const cat = String(p.Category || '').toLowerCase();
-    const creator = String(p.Creator || '').toLowerCase();
-    return sku.includes(query) || name.includes(query) || cat.includes(query) || creator.includes(query);
+    const barcode = String(p.Barcode || '').toLowerCase();
+    const zone = String(p.Zone || '').toLowerCase();
+    const supplier = String(p.SupplierID || '').toLowerCase();
+    return sku.includes(query) || name.includes(query) || cat.includes(query) || barcode.includes(query) || zone.includes(query) || supplier.includes(query);
   });
   renderProducts(filtered);
 }
@@ -497,24 +683,15 @@ function filterSuppliers() {
   const queryInput = document.getElementById('search-suppliers');
   const query = queryInput ? queryInput.value.toLowerCase().trim() : '';
   if (!query) {
-    renderSuppliers();
+    renderSuppliers(null);
     return;
   }
   const filtered = appState.suppliers.filter(s => {
     const id = String(s.SupplierID || '').toLowerCase();
     const name = String(s.CompanyName || '').toLowerCase();
     const tax = String(s.TaxID || '').toLowerCase();
-    const phone = String(s.Phone || '').toLowerCase();
     const contact = String(s.ContactPerson || '').toLowerCase();
-    const creator = String(s.Creator || '').toLowerCase();
-    const email = String(s.Email || '').toLowerCase();
-    return id.includes(query) || 
-           name.includes(query) || 
-           tax.includes(query) || 
-           phone.includes(query) || 
-           contact.includes(query) || 
-           creator.includes(query) || 
-           email.includes(query);
+    return id.includes(query) || name.includes(query) || tax.includes(query) || contact.includes(query);
   });
   renderSuppliers(filtered);
 }
@@ -528,21 +705,9 @@ function filterLogs() {
   }
   const filtered = appState.auditLogs.filter(l => {
     const key = String(l.PrimaryKey || '').toLowerCase();
-    const type = String(l.RecordType || '').toLowerCase();
     const supplier = String(l.SupplierID || '').toLowerCase();
-    const details = String(l.Details || '').toLowerCase();
-    const reason = String(l.Reason || '').toLowerCase();
     const creator = String(l.Creator || '').toLowerCase();
-    const editor = String(l.Editor || '').toLowerCase();
-    const preparer = String(l.Preparer || '').toLowerCase();
-    return key.includes(query) || 
-           supplier.includes(query) ||
-           type.includes(query) || 
-           details.includes(query) || 
-           reason.includes(query) || 
-           creator.includes(query) || 
-           editor.includes(query) || 
-           preparer.includes(query);
+    return key.includes(query) || supplier.includes(query) || creator.includes(query);
   });
   renderLogs(filtered);
 }
@@ -571,7 +736,7 @@ async function callPostAPI(data) {
     const response = await fetch(appState.apiUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain' // ใช้ text/plain เพื่อป้องกันปัญหา CORS preflight OPTIONS ใน Google Apps Script
+        'Content-Type': 'text/plain'
       },
       body: JSON.stringify(data)
     });
@@ -581,7 +746,6 @@ async function callPostAPI(data) {
       throw new Error(result.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลไปยัง Google Sheets');
     }
     
-    // ตั้งหน่วงเวลารอ Google Sheets ทำงาน
     await new Promise(resolve => setTimeout(resolve, 1000));
     await fetchDataAll();
     
@@ -611,28 +775,38 @@ async function saveProduct(event) {
   event.preventDefault();
   
   const sku = document.getElementById('product-sku').value.trim();
+  const barcode = document.getElementById('product-barcode').value.trim();
   const name = document.getElementById('product-name').value.trim();
-  const category = document.getElementById('product-category').value;
-  const uom = document.getElementById('product-uom').value;
+  const category = document.getElementById('product-category').value.trim();
+  const uom = document.getElementById('product-uom').value.trim();
   const quantity = document.getElementById('product-quantity').value;
   const supplierId = document.getElementById('product-supplier-id').value.trim();
+  const zone = document.getElementById('product-zone').value.trim();
   const description = document.getElementById('product-description').value.trim();
   const creator = document.getElementById('product-creator').value.trim();
   const preparer = document.getElementById('product-preparer').value.trim();
   
-  if (!sku || !name || !category || !uom || !quantity || !creator || !preparer) {
-    Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วน รวมถึงชื่อผู้บันทึกและผู้จัดทำ', 'warning');
+  // Creator Field strictly required validation
+  if (!creator || creator.trim() === '') {
+    Swal.fire('การกรอกข้อมูลไม่ครบถ้วน', 'ช่องผู้เพิ่ม/ผู้บันทึกข้อมูล (Creator) จำเป็นต้องระบุตัวตนก่อนทำรายการ!', 'warning');
+    return;
+  }
+  
+  if (!sku || !barcode || !name || !category || !uom || !quantity || !zone || !preparer) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', 'warning');
     return;
   }
 
   const payload = {
     action: 'add_product',
     sku,
+    barcode,
     name,
     category,
     uom,
     quantity,
     supplierId,
+    zone,
     description,
     creator,
     editor: '',
@@ -650,17 +824,20 @@ async function saveProduct(event) {
 }
 
 function startEditProduct(sku) {
+  dismissOffcanvas();
   const product = appState.products.find(p => p.SKU === sku);
   if (!product) return;
 
   appState.currentProductEdit = sku;
   
   document.getElementById('edit-product-sku').value = product.SKU;
+  document.getElementById('edit-product-barcode').value = product.Barcode || '';
   document.getElementById('edit-product-name').value = product.Name;
   document.getElementById('edit-product-category').value = product.Category;
   document.getElementById('edit-product-uom').value = product.UOM;
   document.getElementById('edit-product-quantity').value = product.Quantity;
   document.getElementById('edit-product-supplier-id').value = product.SupplierID || '';
+  document.getElementById('edit-product-zone').value = product.Zone || '';
   document.getElementById('edit-product-description').value = product.Description || '';
   
   document.getElementById('edit-product-user-editor').value = appState.editor;
@@ -668,38 +845,30 @@ function startEditProduct(sku) {
 
   const modal = document.getElementById('edit-product-modal');
   modal.classList.remove('hidden');
-  setTimeout(() => {
-    modal.firstElementChild.classList.remove('scale-95');
-    modal.firstElementChild.classList.add('scale-100');
-  }, 10);
 }
 
 function closeEditProductModal() {
   appState.currentProductEdit = null;
   document.getElementById('edit-product-form').reset();
-  
-  const modal = document.getElementById('edit-product-modal');
-  modal.firstElementChild.classList.remove('scale-100');
-  modal.firstElementChild.classList.add('scale-95');
-  setTimeout(() => {
-    modal.classList.add('hidden');
-  }, 150);
+  document.getElementById('edit-product-modal').classList.add('hidden');
 }
 
 async function submitEditProduct(event) {
   event.preventDefault();
   
   const sku = document.getElementById('edit-product-sku').value;
+  const barcode = document.getElementById('edit-product-barcode').value.trim();
   const name = document.getElementById('edit-product-name').value.trim();
-  const category = document.getElementById('edit-product-category').value;
-  const uom = document.getElementById('edit-product-uom').value;
+  const category = document.getElementById('edit-product-category').value.trim();
+  const uom = document.getElementById('edit-product-uom').value.trim();
   const quantity = document.getElementById('edit-product-quantity').value;
   const supplierId = document.getElementById('edit-product-supplier-id').value.trim();
+  const zone = document.getElementById('edit-product-zone').value.trim();
   const description = document.getElementById('edit-product-description').value.trim();
   const editorName = document.getElementById('edit-product-user-editor').value.trim();
   const reason = document.getElementById('edit-product-reason').value.trim();
   
-  if (!name || !category || !uom || !quantity || !editorName || !reason) {
+  if (!name || !barcode || !category || !uom || !quantity || !zone || !editorName || !reason) {
     Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วน รวมถึงชื่อผู้ทำการแก้ไขและเหตุผล', 'warning');
     return;
   }
@@ -710,11 +879,13 @@ async function submitEditProduct(event) {
   const payload = {
     action: 'edit_product',
     sku,
+    barcode,
     name,
     category,
     uom,
     quantity,
     supplierId,
+    zone,
     description,
     creator: '',
     editor: editorName,
@@ -794,8 +965,14 @@ async function saveSupplier(event) {
   const creator = document.getElementById('supplier-creator').value.trim();
   const preparer = document.getElementById('supplier-preparer').value.trim();
   
-  if (!supplierId || !companyName || !taxId || !phone || !registeredAddress || !creator || !preparer) {
-    Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลสำคัญ รวมถึงชื่อผู้บันทึกและผู้จัดทำ ให้ครบถ้วน', 'warning');
+  // Creator Field strictly required validation
+  if (!creator || creator.trim() === '') {
+    Swal.fire('การกรอกข้อมูลไม่ครบถ้วน', 'ช่องผู้เพิ่ม/ผู้บันทึกข้อมูล (Creator) จำเป็นต้องระบุตัวตนก่อนทำรายการ!', 'warning');
+    return;
+  }
+  
+  if (!supplierId || !companyName || !taxId || !phone || !registeredAddress || !preparer) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลสำคัญ ให้ครบถ้วน', 'warning');
     return;
   }
   
@@ -824,7 +1001,7 @@ async function saveSupplier(event) {
     const res = await callPostAPI(payload);
     if (res && res.status === 'success') {
       document.getElementById('supplier-form').reset();
-      toggleMailingAddressSync(); // Reset address check
+      toggleMailingAddressSync();
     }
   } catch (error) {
     console.error(error);
@@ -832,6 +1009,7 @@ async function saveSupplier(event) {
 }
 
 function startEditSupplier(supplierId) {
+  dismissOffcanvas();
   const supplier = appState.suppliers.find(s => s.SupplierID === supplierId);
   if (!supplier) return;
 
@@ -851,22 +1029,12 @@ function startEditSupplier(supplierId) {
 
   const modal = document.getElementById('edit-supplier-modal');
   modal.classList.remove('hidden');
-  setTimeout(() => {
-    modal.firstElementChild.classList.remove('scale-95');
-    modal.firstElementChild.classList.add('scale-100');
-  }, 10);
 }
 
 function closeEditSupplierModal() {
   appState.currentSupplierEdit = null;
   document.getElementById('edit-supplier-form').reset();
-  
-  const modal = document.getElementById('edit-supplier-modal');
-  modal.firstElementChild.classList.remove('scale-100');
-  modal.firstElementChild.classList.add('scale-95');
-  setTimeout(() => {
-    modal.classList.add('hidden');
-  }, 150);
+  document.getElementById('edit-supplier-modal').classList.add('hidden');
 }
 
 async function submitEditSupplier(event) {
@@ -971,8 +1139,11 @@ function openPrintModal() {
     Swal.fire('ข้อผิดพลาด', 'ไม่พบสินค้าใด ๆ ในระบบที่จะพิมพ์ใบตรวจสอบสต็อก', 'warning');
     return;
   }
+  dismissOffcanvas();
 
   document.getElementById('print-input-preparer').value = appState.editor || 'สมศรี (ผู้แก้ไข)';
+  
+  // Lock Editor Name Strictly
   document.getElementById('print-input-editor').value = 'นายปาณชัย พรมภักดี';
   
   const dateStr = new Date().toLocaleDateString('th-TH', { 
@@ -986,30 +1157,27 @@ function openPrintModal() {
 
   updatePrintNames();
 
-  // Clear search field
+  // Clear search and supplier filters
   const searchInput = document.getElementById('print-search-products');
   if (searchInput) searchInput.value = '';
 
-  // Initialize print selections (all products selected by default)
+  const supSelect = document.getElementById('print-filter-supplier');
+  if (supSelect) {
+    const options = appState.suppliers.map(s => `<option value="${s.SupplierID}">${s.SupplierID} - ${s.CompanyName}</option>`).join('');
+    supSelect.innerHTML = '<option value="">-- แสดงสินค้าของทุกคู่ค้า --</option>' + options;
+    supSelect.value = '';
+  }
+
+  // Reset print selections to all products by default
   appState.printSelections = appState.products.map(item => item.SKU);
   appState.printProductFilteredList = null;
   appState.printProductCurrentPage = 1;
   appState.printProductPerPage = 10;
 
-  // Render selection checklist UI
   renderPrintSelectionList();
-
-  // Render printable preview area
   renderPrintPreview();
 
-  togglePrintCostColumn();
-
-  const modal = document.getElementById('print-modal');
-  modal.classList.remove('hidden');
-  setTimeout(() => {
-    modal.firstElementChild.classList.remove('scale-95');
-    modal.firstElementChild.classList.add('scale-100');
-  }, 10);
+  document.getElementById('print-modal').classList.remove('hidden');
 }
 
 function renderPrintSelectionList() {
@@ -1035,7 +1203,9 @@ function renderPrintSelectionList() {
           <input type="checkbox" class="form-check-input form-check-input-lg" id="print-chk-${item.SKU}" ${isChecked ? 'checked' : ''} onchange="togglePrintProduct('${item.SKU}', this.checked)">
         </td>
         <td class="font-mono">${item.SKU}</td>
+        <td class="font-mono text-xs text-muted">${item.Barcode || '-'}</td>
         <td class="font-mono text-xs text-muted">${item.SupplierID || '-'}</td>
+        <td class="font-mono text-xs text-muted">${item.Zone || '-'}</td>
         <td class="fw-semibold text-dark">${item.Name}</td>
         <td>${item.Category}</td>
         <td class="text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')} ${item.UOM}</td>
@@ -1071,11 +1241,39 @@ function renderPrintSelectionPagination(totalItems, totalPages) {
     </li>
   `;
 
-  for (let i = 1; i <= totalPages; i++) {
+  let startPage = Math.max(1, appState.printProductCurrentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) {
+    startPage = Math.max(1, endPage - 4);
+  }
+
+  if (startPage > 1) {
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changePrintSelectionPage(1)">1</button>
+      </li>
+    `;
+    if (startPage > 2) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
     const activeClass = i === appState.printProductCurrentPage ? 'active' : '';
     paginationHtml += `
       <li class="page-item ${activeClass}">
         <button class="page-link" onclick="changePrintSelectionPage(${i})">${i}</button>
+      </li>
+    `;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    paginationHtml += `
+      <li class="page-item">
+        <button class="page-link" onclick="changePrintSelectionPage(${totalPages})">${totalPages}</button>
       </li>
     `;
   }
@@ -1114,53 +1312,75 @@ function togglePrintProduct(sku, isChecked) {
 }
 
 function selectAllPrintProducts(shouldSelectAll) {
+  const currentList = appState.printProductFilteredList || appState.products;
   if (shouldSelectAll) {
-    appState.printSelections = appState.products.map(item => item.SKU);
+    currentList.forEach(item => {
+      if (!appState.printSelections.includes(item.SKU)) {
+        appState.printSelections.push(item.SKU);
+      }
+    });
   } else {
-    appState.printSelections = [];
+    const skusToRemove = currentList.map(item => item.SKU);
+    appState.printSelections = appState.printSelections.filter(s => !skusToRemove.includes(s));
   }
 
-  // Update checkboxes in the list
-  appState.products.forEach(item => {
-    const chk = document.getElementById(`print-chk-${item.SKU}`);
-    if (chk) {
-      chk.checked = shouldSelectAll;
-    }
-  });
-
+  renderPrintSelectionList();
   renderPrintPreview();
 }
 
 function filterPrintSelection() {
   const query = document.getElementById('print-search-products').value.toLowerCase().trim();
+  const selectedSupplier = document.getElementById('print-filter-supplier').value;
+  
+  let baseList = appState.products;
+  if (selectedSupplier) {
+    baseList = appState.products.filter(item => String(item.SupplierID || '') === selectedSupplier);
+  }
   
   if (!query) {
-    appState.printProductFilteredList = null;
+    appState.printProductFilteredList = selectedSupplier ? baseList : null;
+    appState.printSelections = baseList.map(item => item.SKU);
   } else {
-    appState.printProductFilteredList = appState.products.filter(item => {
-      const matchesSKU = item.SKU.toLowerCase().includes(query);
-      const matchesName = item.Name.toLowerCase().includes(query);
-      const matchesCategory = item.Category.toLowerCase().includes(query);
-      const matchesSupplier = (item.SupplierID || '').toLowerCase().includes(query);
-      return matchesSKU || matchesName || matchesCategory || matchesSupplier;
+    appState.printProductFilteredList = baseList.filter(item => {
+      const matchesSKU = String(item.SKU || '').toLowerCase().includes(query);
+      const matchesBarcode = String(item.Barcode || '').toLowerCase().includes(query);
+      const matchesSupplier = String(item.SupplierID || '').toLowerCase().includes(query);
+      return matchesSKU || matchesBarcode || matchesSupplier;
     });
+    appState.printSelections = appState.printProductFilteredList.map(item => item.SKU);
   }
   appState.printProductCurrentPage = 1;
   renderPrintSelectionList();
+  renderPrintPreview();
+}
+
+function filterPrintProductsBySupplier() {
+  const selectedSupplier = document.getElementById('print-filter-supplier').value;
+  if (!selectedSupplier) {
+    appState.printProductFilteredList = null;
+    appState.printSelections = appState.products.map(item => item.SKU);
+  } else {
+    appState.printProductFilteredList = appState.products.filter(item => item.SupplierID === selectedSupplier);
+    appState.printSelections = appState.printProductFilteredList.map(item => item.SKU);
+  }
+  appState.printProductCurrentPage = 1;
+  renderPrintSelectionList();
+  renderPrintPreview();
 }
 
 function renderPrintPreview() {
   const tbody = document.getElementById('print-table-body');
   if (!tbody) return;
 
-  const selectedProducts = appState.products.filter(item => 
+  const currentList = appState.printProductFilteredList || appState.products;
+  const selectedProducts = currentList.filter(item => 
     appState.printSelections && appState.printSelections.includes(item.SKU)
   );
 
   if (selectedProducts.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center py-4 text-muted">
+        <td colspan="9" class="text-center py-4 text-muted">
           <i class="fa-solid fa-triangle-exclamation me-1"></i> ไม่มีสินค้าที่เลือกสำหรับสั่งพิมพ์
         </td>
       </tr>
@@ -1168,24 +1388,76 @@ function renderPrintPreview() {
     return;
   }
 
-  tbody.innerHTML = selectedProducts.map((item, index) => `
-    <tr class="border-bottom border-secondary-subtle">
-      <td class="py-2 px-3 border-end border-secondary-subtle text-center">${index + 1}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle font-mono">${item.SKU}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle fw-semibold text-dark">${item.Name}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle text-center font-mono" style="font-size: 0.9em;">${item.SupplierID || '-'}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle text-center">${item.UOM}</td>
-      <td class="py-2 px-3 border-end border-secondary-subtle text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
-      <td class="py-2 px-3 text-center text-secondary opacity-50">
-        [ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ] ${item.UOM}
-      </td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = selectedProducts.map((item, index) => {
+    const barcodeStr = (item.Barcode !== undefined && item.Barcode !== null) ? String(item.Barcode).trim() : '';
+    const hasBarcode = barcodeStr !== '';
+    return `
+      <tr class="border-bottom border-secondary-subtle">
+        <td class="py-2 px-2 border-end border-secondary-subtle text-center">${index + 1}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle font-mono">${item.SKU}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle text-center">
+          ${hasBarcode ? `
+            <div class="barcode-container">
+              <svg class="barcode-svg" id="print-barcode-svg-${item.SKU}"></svg>
+            </div>
+          ` : '-'}
+        </td>
+        <td class="py-2 px-2 border-end border-secondary-subtle text-center font-mono">${item.Zone || '-'}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle fw-semibold text-dark">${item.Name}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle text-center font-mono" style="font-size: 0.9em;">${item.SupplierID || '-'}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle text-center">${item.UOM}</td>
+        <td class="py-2 px-2 border-end border-secondary-subtle text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
+        <td class="py-2 px-2 text-center text-secondary opacity-50">
+          [ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ] ${item.UOM}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Call JsBarcode library on all SVG objects
+  selectedProducts.forEach(item => {
+    const barcodeStr = (item.Barcode !== undefined && item.Barcode !== null) ? String(item.Barcode).trim() : '';
+    const hasBarcode = barcodeStr !== '';
+    if (!hasBarcode) return;
+
+    const val = barcodeStr;
+    
+    // Check if EAN-13 format is suitable (must be numeric and 12 or 13 digits)
+    const isNumeric = /^\d+$/.test(val);
+    const isEanLength = val.length === 12 || val.length === 13;
+    const formatType = (isNumeric && isEanLength) ? "EAN13" : "CODE128";
+
+    try {
+      JsBarcode(`#print-barcode-svg-${item.SKU}`, val, {
+        format: formatType,
+        displayValue: true,
+        fontSize: 10,
+        textMargin: 2,
+        height: 25,
+        width: 1.2
+      });
+    } catch (e) {
+      // Fallback to CODE128 if EAN13 generation fails (e.g. invalid checksum)
+      try {
+        JsBarcode(`#print-barcode-svg-${item.SKU}`, val, {
+          format: "CODE128",
+          displayValue: true,
+          fontSize: 10,
+          textMargin: 2,
+          height: 25,
+          width: 1.2
+        });
+      } catch (err) {
+        console.error("Barcode generation failed for SKU " + item.SKU, err);
+      }
+    }
+  });
 }
 
 function updatePrintNames() {
   const prepVal = document.getElementById('print-input-preparer').value.trim() || '-';
-  const editVal = document.getElementById('print-input-editor').value.trim() || '-';
+  // Strictly enforce locked editor name
+  const editVal = "นายปาณชัย พรมภักดี";
   
   document.getElementById('print-preparer-name').innerText = prepVal;
   document.getElementById('print-editor-name').innerText = editVal;
@@ -1195,17 +1467,7 @@ function updatePrintNames() {
 }
 
 function closePrintModal() {
-  const modal = document.getElementById('print-modal');
-  modal.firstElementChild.classList.remove('scale-100');
-  modal.firstElementChild.classList.add('scale-95');
-  setTimeout(() => {
-    modal.classList.add('hidden');
-  }, 150);
-}
-
-function togglePrintCostColumn() {
-  // Cost column functionality is deprecated since we replaced price/cost with Quantity,
-  // but we keep the method stub to prevent errors.
+  document.getElementById('print-modal').classList.add('hidden');
 }
 
 // Print Supplier Sheet Module
@@ -1214,8 +1476,11 @@ function openPrintSupplierModal() {
     Swal.fire('ข้อผิดพลาด', 'ไม่พบคู่ค้าใด ๆ ในระบบที่จะพิมพ์ใบตรวจสอบ', 'warning');
     return;
   }
+  dismissOffcanvas();
 
   document.getElementById('print-sup-input-preparer').value = appState.editor || 'สมศรี (ผู้แก้ไข)';
+  
+  // Lock Editor Name Strictly
   document.getElementById('print-sup-input-editor').value = 'นายปาณชัย พรมภักดี';
   
   const dateStr = new Date().toLocaleDateString('th-TH', { 
@@ -1229,25 +1494,15 @@ function openPrintSupplierModal() {
 
   updatePrintSupplierNames();
 
-  // Clear search field
   const searchInput = document.getElementById('print-sup-search-suppliers');
   if (searchInput) searchInput.value = '';
 
-  // Initialize print selections (all suppliers selected by default)
   appState.printSupplierSelections = appState.suppliers.map(item => item.SupplierID);
 
-  // Render selection checklist UI
   renderPrintSupplierSelectionList();
-
-  // Render printable preview area
   renderPrintSupplierPreview();
 
-  const modal = document.getElementById('print-supplier-modal');
-  modal.classList.remove('hidden');
-  setTimeout(() => {
-    modal.firstElementChild.classList.remove('scale-95');
-    modal.firstElementChild.classList.add('scale-100');
-  }, 10);
+  document.getElementById('print-supplier-modal').classList.remove('hidden');
 }
 
 function renderPrintSupplierSelectionList() {
@@ -1293,7 +1548,6 @@ function selectAllPrintSuppliers(shouldSelectAll) {
     appState.printSupplierSelections = [];
   }
 
-  // Update checkboxes in the list
   appState.suppliers.forEach(item => {
     const chk = document.getElementById(`print-sup-chk-${item.SupplierID}`);
     if (chk) {
@@ -1304,7 +1558,6 @@ function selectAllPrintSuppliers(shouldSelectAll) {
   renderPrintSupplierPreview();
 }
 
-// Filter the supplier checklist as typing
 function filterPrintSupplierSelection() {
   const query = document.getElementById('print-sup-search-suppliers').value.toLowerCase().trim();
   
@@ -1312,10 +1565,10 @@ function filterPrintSupplierSelection() {
     const row = document.getElementById(`print-sup-select-row-${item.SupplierID}`);
     if (!row) return;
 
-    const matchesID = item.SupplierID.toLowerCase().includes(query);
-    const matchesName = item.CompanyName.toLowerCase().includes(query);
-    const matchesTaxID = item.TaxID.toLowerCase().includes(query);
-    const matchesPhone = (item.Phone || '').toLowerCase().includes(query);
+    const matchesID = String(item.SupplierID || '').toLowerCase().includes(query);
+    const matchesName = String(item.CompanyName || '').toLowerCase().includes(query);
+    const matchesTaxID = String(item.TaxID || '').toLowerCase().includes(query);
+    const matchesPhone = String(item.Phone || '').toLowerCase().includes(query);
 
     if (matchesID || matchesName || matchesTaxID || matchesPhone) {
       row.classList.remove('d-none');
@@ -1361,7 +1614,8 @@ function renderPrintSupplierPreview() {
 
 function updatePrintSupplierNames() {
   const prepVal = document.getElementById('print-sup-input-preparer').value.trim() || '-';
-  const editVal = document.getElementById('print-sup-input-editor').value.trim() || '-';
+  // Strictly lock editor name
+  const editVal = "นายปาณชัย พรมภักดี";
   
   document.getElementById('print-sup-preparer-name').innerText = prepVal;
   document.getElementById('print-sup-editor-name').innerText = editVal;
@@ -1371,11 +1625,5 @@ function updatePrintSupplierNames() {
 }
 
 function closePrintSupplierModal() {
-  const modal = document.getElementById('print-supplier-modal');
-  modal.firstElementChild.classList.remove('scale-100');
-  modal.firstElementChild.classList.add('scale-95');
-  setTimeout(() => {
-    modal.classList.add('hidden');
-  }, 150);
+  document.getElementById('print-supplier-modal').classList.add('hidden');
 }
-

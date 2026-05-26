@@ -15,6 +15,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- JsBarcode Library CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
   
   <style>
     body {
@@ -95,11 +97,26 @@
       cursor: pointer;
     }
     
+    /* Barcode styling */
+    .barcode-container {
+      display: inline-block;
+      text-align: center;
+      width: 100%;
+    }
+    .barcode-svg {
+      max-width: 100%;
+      height: auto;
+      max-height: 48px;
+    }
+    
     /* CSS for Printing */
     @media print {
       @page {
         size: A4 portrait;
-        margin: 15mm 15mm !important;
+        margin-top: 25mm !important;
+        margin-bottom: 25mm !important;
+        margin-left: 30mm !important;
+        margin-right: 20mm !important;
       }
       
       /* Hide the main app layout and other modals completely to prevent overlap and layout noise */
@@ -159,27 +176,67 @@
         border: 0 !important;
         box-shadow: none !important;
         background: #fff !important;
-        color: #000 !important;
+        color: #000000 !important;
+      }
+      .printable-content, 
+      .printable-content * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
       }
       
       /* Tables formatting */
+      .table-responsive {
+        overflow: visible !important;
+        width: 100% !important;
+        display: block !important;
+      }
       table {
         border-collapse: collapse !important;
         width: 100% !important;
+        table-layout: fixed !important;
+        word-wrap: break-word !important;
       }
       th, td {
-        border: 1px solid #000 !important;
-        padding: 6px 8px !important;
+        border: 1px solid #000000 !important;
+        padding: 4px 4px !important;
         text-align: left !important;
+        word-break: break-all !important;
+        white-space: normal !important;
+        font-size: 8pt !important;
       }
       th {
         background-color: #f3f4f6 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      tr, .mt-3 {
+      tr, .mt-3, .print-signatures-block, .print-signatures-block .col-5 {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+      }
+      .barcode-container {
+        display: block !important;
+        width: 100% !important;
+        text-align: center !important;
+      }
+      .barcode-svg {
+        max-height: 28px !important;
+        max-width: 100% !important;
+        height: auto !important;
+        width: auto !important;
+      }
+    }
+    
+    /* Hide printable preview containers on screen, show only during print */
+    @media screen {
+      #print-area-wrapper,
+      #print-sup-area-wrapper {
+        display: none !important;
+      }
+    }
+    @media print {
+      #print-area-wrapper,
+      #print-sup-area-wrapper {
+        display: block !important;
       }
     }
   </style>
@@ -263,13 +320,13 @@
               </button>
             </nav>
 
-            <!-- Print Buttons -->
+            <!-- Print Buttons with Offcanvas Dismissal -->
             <div class="mt-2 mt-lg-0 w-100 text-lg-end d-flex flex-column flex-lg-row gap-2 justify-content-lg-end" style="max-width: 440px;">
-              <button onclick="openPrintModal()" class="btn btn-success w-100 d-flex align-items-center justify-content-center gap-2 py-2 px-3 fw-semibold shadow-sm rounded-3">
+              <button onclick="openPrintModal()" data-bs-dismiss="offcanvas" data-bs-target="#topNavbarMenu" class="btn btn-success w-100 d-flex align-items-center justify-content-center gap-2 py-2 px-3 fw-semibold shadow-sm rounded-3">
                 <i class="fa-solid fa-print"></i>
                 <span style="font-size: 13.5px; white-space: nowrap;">พิมพ์ใบเช็คสต็อก</span>
               </button>
-              <button onclick="openPrintSupplierModal()" class="btn btn-info text-white w-100 d-flex align-items-center justify-content-center gap-2 py-2 px-3 fw-semibold shadow-sm rounded-3">
+              <button onclick="openPrintSupplierModal()" data-bs-dismiss="offcanvas" data-bs-target="#topNavbarMenu" class="btn btn-info text-white w-100 d-flex align-items-center justify-content-center gap-2 py-2 px-3 fw-semibold shadow-sm rounded-3">
                 <i class="fa-solid fa-print"></i>
                 <span style="font-size: 13.5px; white-space: nowrap;">พิมพ์ใบตรวจสอบคู่ค้า</span>
               </button>
@@ -310,6 +367,10 @@
                     <input type="text" id="product-sku" required placeholder="เช่น PROD-COM-001" class="form-control font-mono">
                   </div>
                   <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-barcode">รหัสบาร์โค้ดสินค้า (Barcode ID) <span class="text-danger">*</span></label>
+                    <input type="text" id="product-barcode" required placeholder="ยิงหรือพิมพ์เลขบาร์โค้ดสินค้า เช่น 8850001234567" class="form-control font-mono">
+                  </div>
+                  <div class="col-12">
                     <label class="form-label fw-semibold text-secondary small" for="product-name">ชื่อสินค้า (Product Name) <span class="text-danger">*</span></label>
                     <input type="text" id="product-name" required placeholder="ระบุชื่อเรียกสินค้าในคลัง" class="form-control">
                   </div>
@@ -318,6 +379,10 @@
                     <select id="product-supplier-id" class="form-select font-mono text-sm">
                       <option value="">-- ไม่ระบุคู่ค้า --</option>
                     </select>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold text-secondary small" for="product-zone">โซนที่จัดเก็บ (Storage Zone) <span class="text-danger">*</span></label>
+                    <input type="text" id="product-zone" required placeholder="เช่น A-01, B-02" class="form-control font-mono">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold text-secondary small" for="product-category">หมวดหมู่ <span class="text-danger">*</span></label>
@@ -367,7 +432,7 @@
                   <!-- Search box -->
                   <div class="input-group" style="max-width: 280px;">
                     <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
-                    <input type="text" id="search-products" oninput="filterProducts()" placeholder="ค้นหารหัส หรือชื่อสินค้า..." class="form-control border-start-0 ps-1">
+                    <input type="text" id="search-products" oninput="filterProducts()" placeholder="ค้นหารหัส ชื่อ หรือบาร์โค้ด..." class="form-control border-start-0 ps-1">
                   </div>
                 </div>
 
@@ -377,17 +442,21 @@
                     <thead class="table-light text-secondary fw-semibold small">
                       <tr>
                         <th class="py-3 px-4 font-mono">SKU</th>
+                        <th class="py-3 px-4 font-mono">รหัสบาร์โค้ด</th>
+                        <th class="py-3 px-4 font-mono">โซนที่จัดเก็บ</th>
                         <th class="py-3 px-4">ชื่อสินค้า</th>
                         <th class="py-3 px-4">หมวดหมู่</th>
-                        <th class="py-3 px-4">รหัสคู่ค้า</th>
                         <th class="py-3 px-4">หน่วยนับ</th>
+                        <th class="py-3 px-4">รายละเอียด</th>
                         <th class="py-3 px-4 text-end">จำนวนคงคลัง</th>
+                        <th class="py-3 px-4 font-mono">รหัสคู่ค้า</th>
+                        <th class="py-3 px-4">วันที่เพิ่ม</th>
                         <th class="py-3 px-4 text-center">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody id="product-table-body" class="small">
                       <tr>
-                        <td colspan="7" class="text-center py-5 text-muted"><i class="fa-solid fa-spinner animate-spin me-2"></i>กำลังโหลดข้อมูล...</td>
+                        <td colspan="11" class="text-center py-5 text-muted"><i class="fa-solid fa-spinner animate-spin me-2"></i>กำลังโหลดข้อมูล...</td>
                       </tr>
                     </tbody>
                   </table>
@@ -442,7 +511,7 @@
                     </div>
                   </div>
 
-                  <!-- 2. ข้อมูลการติดต่อ -->
+                  <!-- 2. ข้อมูลการติดต่อ (Responsive mobile stacked layout) -->
                   <div class="col-12 pt-2">
                     <span class="d-flex align-items-center gap-1.5 fw-bold text-dark small border-bottom pb-1 mb-2">
                       <i class="fa-solid fa-address-book text-success"></i> 2. ข้อมูลการติดต่อ
@@ -452,11 +521,11 @@
                       <input type="text" id="supplier-contact-person" placeholder="ชื่อพนักงานขาย / ผู้ประสานงาน" class="form-control">
                     </div>
                     <div class="row g-2 mb-2">
-                      <div class="col-6">
+                      <div class="col-sm-6 col-12">
                         <label class="form-label fw-semibold text-secondary small" for="supplier-phone">เบอร์โทรศัพท์ <span class="text-danger">*</span></label>
-                        <input type="tel" id="supplier-phone" required placeholder="เช่น 02-555-9999" class="form-control">
+                        <input type="tel" id="supplier-phone" required placeholder="เช่น 025559999" class="form-control">
                       </div>
-                      <div class="col-6">
+                      <div class="col-sm-6 col-12">
                         <label class="form-label fw-semibold text-secondary small" for="supplier-email">อีเมล</label>
                         <input type="email" id="supplier-email" placeholder="sales@company.com" class="form-control">
                       </div>
@@ -534,6 +603,18 @@
                     </tbody>
                   </table>
                 </div>
+                
+                <!-- Supplier Pagination Controls -->
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3 mt-3 no-print">
+                  <div id="supplier-pagination-info" class="small text-muted">
+                    แสดงข้อมูล 0 - 0 จากทั้งหมด 0 รายการ
+                  </div>
+                  <nav aria-label="Supplier navigation">
+                    <ul id="supplier-pagination-list" class="pagination pagination-sm m-0">
+                      <!-- Dynamically populated page buttons -->
+                    </ul>
+                  </nav>
+                </div>
               </div>
             </div>
 
@@ -556,7 +637,7 @@
                 <!-- Search box -->
                 <div class="input-group" style="max-width: 280px;">
                   <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
-                  <input type="text" id="search-logs" oninput="filterLogs()" placeholder="ค้นหาข้อมูล หรือ เหตุผล..." class="form-control border-start-0 ps-1">
+                  <input type="text" id="search-logs" oninput="filterLogs()" placeholder="ค้นหา รหัสสินค้า/รหัสคู่ค้า/ผู้เพิ่ม..." class="form-control border-start-0 ps-1">
                 </div>
                 <button onclick="fetchAuditLogs()" class="btn btn-outline-secondary px-3 py-2" title="รีเฟรชประวัติ">
                   <i class="fa-solid fa-arrows-rotate"></i>
@@ -610,7 +691,7 @@
   <!-- Print Stock Check Modal -->
   <div id="print-modal" class="hidden">
     <div class="modal-dialog-custom">
-      <div class="modal-content-custom" style="max-width: 900px;">
+      <div class="modal-content-custom" style="max-width: 950px;">
         <!-- Header -->
         <div class="p-4 border-bottom bg-light d-flex align-items-center justify-content-between no-print">
           <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -630,7 +711,17 @@
             </div>
             <div class="col-md-6 col-12">
               <label class="form-label fw-semibold text-secondary small" for="print-input-editor">ผู้อนุมัติ (ครูผู้จัดการคลังสินค้า/ผู้ตรวจสอบ)</label>
-              <input type="text" id="print-input-editor" oninput="updatePrintNames()" placeholder="ป้อนชื่อผู้อนุมัติ" class="form-control fw-semibold text-dark">
+              <input type="text" id="print-input-editor" oninput="updatePrintNames()" readonly value="นายปาณชัย พรมภักดี" class="form-control fw-semibold text-dark">
+            </div>
+          </div>
+          
+          <!-- Dropdown Filter by Supplier -->
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold text-secondary small" for="print-filter-supplier">กรองแสดงสินค้าตามคู่ค้า</label>
+              <select id="print-filter-supplier" onchange="filterPrintProductsBySupplier()" class="form-select text-sm font-sans">
+                <option value="">-- แสดงสินค้าของทุกคู่ค้า --</option>
+              </select>
             </div>
           </div>
 
@@ -644,7 +735,7 @@
             </div>
             
             <div class="mb-3">
-              <input type="text" id="print-search-products" oninput="filterPrintSelection()" placeholder="ค้นหาสินค้าเพื่อติ๊กเลือก/ยกเลิก..." class="form-control py-2">
+              <input type="text" id="print-search-products" oninput="filterPrintSelection()" placeholder="ค้นหารหัส SKU หรือรหัสคู่ค้าเพื่อกรอกเลือกสินค้า..." class="form-control py-2">
             </div>
             
             <div class="table-responsive rounded border" style="max-height: 320px; overflow-y: auto; font-size: 14px;">
@@ -652,8 +743,10 @@
                 <thead class="table-light sticky-top text-secondary">
                   <tr>
                     <th style="width: 50px;" class="text-center">เลือก</th>
-                    <th style="width: 140px;">SKU</th>
+                    <th style="width: 120px;">SKU</th>
+                    <th style="width: 130px;">รหัสบาร์โค้ด</th>
                     <th style="width: 100px;">รหัสคู่ค้า</th>
+                    <th style="width: 100px;">โซนที่จัดเก็บ</th>
                     <th>ชื่อสินค้า</th>
                     <th>หมวดหมู่</th>
                     <th style="width: 100px;" class="text-end">จำนวนคงคลัง</th>
@@ -687,8 +780,8 @@
         </div>
 
         <!-- Printable Preview Content -->
-        <div class="p-4 bg-light bg-opacity-50">
-          <div id="print-area" class="printable-content bg-white p-4 p-md-5 border shadow-sm mx-auto" style="max-width: 800px; min-height: 270mm;">
+        <div id="print-area-wrapper" class="p-4 bg-light bg-opacity-50">
+          <div id="print-area" class="printable-content bg-white p-3 p-md-4 border shadow-sm mx-auto" style="max-width: 850px; min-height: 270mm;">
             
             <!-- Doc Title -->
             <div class="text-center mb-3 border-bottom border-dark border-3 pb-3">
@@ -708,25 +801,29 @@
             </div>
 
             <!-- Doc table -->
-            <table class="w-100 text-dark mb-3 border border-dark border-collapse" style="font-size: 11px;">
-              <thead>
-                <tr class="bg-light fw-bold text-dark border-bottom border-dark">
-                  <th class="py-2 px-3 text-center border-end border-dark" style="width: 50px;">ลำดับ</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 130px;">รหัสสินค้า (SKU)</th>
-                  <th class="py-2 px-3 border-end border-dark">ชื่อสินค้า</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 80px;">รหัสคู่ค้า</th>
-                  <th class="py-2 px-3 text-center border-end border-dark" style="width: 70px;">หน่วยนับ</th>
-                  <th class="py-2 px-3 text-end border-end border-dark" style="width: 80px;">จำนวนระบบ</th>
-                  <th class="py-2 px-3 text-center style-count" style="width: 100px;">ตรวจนับจริง</th>
-                </tr>
-              </thead>
-              <tbody id="print-table-body">
-                <!-- Dynamically populated -->
-              </tbody>
-            </table>
+            <div class="table-responsive">
+              <table class="w-100 text-dark mb-3 border border-dark border-collapse" style="font-size: 10px;">
+                <thead>
+                  <tr class="bg-light fw-bold text-dark border-bottom border-dark">
+                    <th class="py-2 px-2 text-center border-end border-dark" style="width: 5%;">ลำดับ</th>
+                    <th class="py-2 px-2 border-end border-dark" style="width: 12%;">รหัสสินค้า (SKU)</th>
+                    <th class="py-2 px-2 border-end border-dark text-center" style="width: 20%;">บาร์โค้ด (Barcode)</th>
+                    <th class="py-2 px-2 border-end border-dark text-center" style="width: 10%;">โซนจัดเก็บ</th>
+                    <th class="py-2 px-2 border-end border-dark">ชื่อสินค้า</th>
+                    <th class="py-2 px-2 border-end border-dark text-center" style="width: 11%;">รหัสคู่ค้า</th>
+                    <th class="py-2 px-2 text-center border-end border-dark" style="width: 8%;">หน่วยนับ</th>
+                    <th class="py-2 px-2 text-end border-end border-dark" style="width: 10%;">จำนวนระบบ</th>
+                    <th class="py-2 px-2 text-center" style="width: 13%;">ตรวจนับจริง</th>
+                  </tr>
+                </thead>
+                <tbody id="print-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
 
             <!-- Signatures -->
-            <div class="mt-3 pt-2">
+            <div class="print-signatures-block mt-4 pt-2">
               <div class="row justify-content-between text-center small text-dark g-4">
                 <div class="col-5">
                   <div class="mb-4">ลงชื่อ............................................................ ผู้จัดทำ/ตรวจนับ</div>
@@ -774,7 +871,7 @@
             </div>
             <div class="col-md-6 col-12">
               <label class="form-label fw-semibold text-secondary small" for="print-sup-input-editor">ผู้อนุมัติ (ครูผู้จัดการคลังสินค้า/ผู้ตรวจสอบ)</label>
-              <input type="text" id="print-sup-input-editor" oninput="updatePrintSupplierNames()" placeholder="ป้อนชื่อผู้อนุมัติ" class="form-control fw-semibold text-dark">
+              <input type="text" id="print-sup-input-editor" oninput="updatePrintSupplierNames()" readonly value="นายปาณชัย พรมภักดี" class="form-control fw-semibold text-dark">
             </div>
           </div>
 
@@ -818,7 +915,7 @@
         </div>
 
         <!-- Printable Preview Content -->
-        <div class="p-4 bg-light bg-opacity-50">
+        <div id="print-sup-area-wrapper" class="p-4 bg-light bg-opacity-50">
           <div id="print-sup-area" class="printable-content bg-white p-4 p-md-5 border shadow-sm mx-auto" style="max-width: 800px; min-height: 270mm;">
             
             <!-- Doc Title -->
@@ -839,25 +936,27 @@
             </div>
 
             <!-- Doc table -->
-            <table class="w-100 text-dark mb-3 border border-dark border-collapse" style="font-size: 11px;">
-              <thead>
-                <tr class="bg-light fw-bold text-dark border-bottom border-dark">
-                  <th class="py-2 px-3 text-center border-end border-dark" style="width: 50px;">ลำดับ</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 100px;">รหัสคู่ค้า</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 180px;">ชื่อบริษัทคู่ค้า</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 100px;">เลขผู้เสียภาษี</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 100px;">ผู้ติดต่อ</th>
-                  <th class="py-2 px-3 border-end border-dark" style="width: 100px;">เบอร์โทรศัพท์</th>
-                  <th class="py-2 px-3 text-center" style="width: 140px;">ผลการตรวจสอบ</th>
-                </tr>
-              </thead>
-              <tbody id="print-sup-table-body">
-                <!-- Dynamically populated -->
-              </tbody>
-            </table>
+            <div class="table-responsive">
+              <table class="w-100 text-dark mb-3 border border-dark border-collapse" style="font-size: 11px;">
+                <thead>
+                  <tr class="bg-light fw-bold text-dark border-bottom border-dark">
+                    <th class="py-2 px-3 text-center border-end border-dark" style="width: 5%;">ลำดับ</th>
+                    <th class="py-2 px-3 border-end border-dark" style="width: 12%;">รหัสคู่ค้า</th>
+                    <th class="py-2 px-3 border-end border-dark">ชื่อบริษัทคู่ค้า</th>
+                    <th class="py-2 px-3 border-end border-dark" style="width: 16%;">เลขผู้เสียภาษี</th>
+                    <th class="py-2 px-3 border-end border-dark" style="width: 15%;">ผู้ติดต่อ</th>
+                    <th class="py-2 px-3 border-end border-dark" style="width: 14%;">เบอร์โทรศัพท์</th>
+                    <th class="py-2 px-3 text-center" style="width: 18%;">ผลการตรวจสอบ</th>
+                  </tr>
+                </thead>
+                <tbody id="print-sup-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
 
             <!-- Signatures -->
-            <div class="mt-3 pt-2">
+            <div class="print-signatures-block mt-3 pt-2">
               <div class="row justify-content-between text-center small text-dark g-4">
                 <div class="col-5">
                   <div class="mb-4">ลงชื่อ............................................................ ผู้จัดทำ/ผู้ตรวจสอบ</div>
@@ -900,6 +999,10 @@
             <input type="text" id="edit-product-sku" readonly class="form-control bg-light text-muted font-mono border-secondary-subtle">
           </div>
           <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-barcode">รหัสบาร์โค้ดสินค้า (Barcode ID) <span class="text-danger">*</span></label>
+            <input type="text" id="edit-product-barcode" required placeholder="ยิงหรือพิมพ์บาร์โค้ด" class="form-control font-mono">
+          </div>
+          <div class="col-12">
             <label class="form-label fw-semibold text-secondary small" for="edit-product-name">ชื่อสินค้า <span class="text-danger">*</span></label>
             <input type="text" id="edit-product-name" required placeholder="ชื่อเรียกในคลัง" class="form-control">
           </div>
@@ -908,6 +1011,10 @@
             <select id="edit-product-supplier-id" class="form-select font-mono text-sm">
               <option value="">-- ไม่ระบุคู่ค้า --</option>
             </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold text-secondary small" for="edit-product-zone">โซนที่จัดเก็บ (Storage Zone) <span class="text-danger">*</span></label>
+            <input type="text" id="edit-product-zone" required placeholder="เช่น A-01, B-02" class="form-control font-mono">
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold text-secondary small" for="edit-product-category">หมวดหมู่ <span class="text-danger">*</span></label>
@@ -976,11 +1083,11 @@
             <input type="text" id="edit-supplier-contact-person" placeholder="ผู้จัดการขาย / เซลส์" class="form-control">
           </div>
           <div class="row g-2 p-0 m-0">
-            <div class="col-6 ps-0">
+            <div class="col-sm-6 col-12 ps-0 pe-0 pe-sm-2 mb-2 mb-sm-0">
               <label class="form-label fw-semibold text-secondary small" for="edit-supplier-phone">เบอร์โทรศัพท์ <span class="text-danger">*</span></label>
               <input type="tel" id="edit-supplier-phone" required placeholder="เบอร์โทรตรง" class="form-control">
             </div>
-            <div class="col-6 pe-0">
+            <div class="col-sm-6 col-12 pe-0 ps-0 ps-sm-2">
               <label class="form-label fw-semibold text-secondary small" for="edit-supplier-email">อีเมล</label>
               <input type="email" id="edit-supplier-email" placeholder="email@domain.com" class="form-control">
             </div>
@@ -1014,8 +1121,8 @@
     </div>
   </div>
 
-  <!-- Bootstrap 5.3.3 JS Bundle CDN (Required for mobile offcanvas, modals, and toggles) -->
+  <!-- Bootstrap 5.3.3 JS Bundle CDN -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/app.js?v=14"></script>
 </body>
 </html>
