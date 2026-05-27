@@ -84,6 +84,7 @@ function handleRequest(e, method) {
       if (postAction === 'add_product') result = addProduct(data);
       else if (postAction === 'edit_product') result = editProduct(data);
       else if (postAction === 'delete_product') result = deleteProduct(data);
+      else if (postAction === 'issue_product') result = issueProduct(data);
       else if (postAction === 'add_supplier') result = addSupplier(data);
       else if (postAction === 'edit_supplier') result = editSupplier(data);
       else if (postAction === 'delete_supplier') result = deleteSupplier(data);
@@ -245,6 +246,109 @@ function deleteProduct(data) {
     }
   }
   throw new Error('ไม่พบสินค้านี้');
+}
+
+function issueProduct(data) {
+  const sheet = getOrCreateSheet('Products');
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  
+  const skuCol = headers.indexOf('SKU') + 1;
+  const qtyCol = headers.indexOf('Quantity') + 1;
+  const zoneCol = headers.indexOf('Zone') + 1;
+  const nameCol = headers.indexOf('Name') + 1;
+  
+  if (skuCol === 0 || qtyCol === 0) {
+    throw new Error('ไม่พบโครงสร้างคอลัมน์ SKU หรือ Quantity ในชีต Products');
+  }
+  
+  const items = data.items || [];
+  if (items.length === 0) {
+    throw new Error('กรุณาระบุสินค้าที่ต้องการเบิก');
+  }
+  
+  // First validate all items to make sure none exceed on-hand qty (all-or-nothing check)
+  for (let k = 0; k < items.length; k++) {
+    const item = items[k];
+    const targetSku = String(item.sku || '').trim().toLowerCase();
+    const issuedQty = Number(item.issuedQuantity || 0);
+    const damagedQty = Number(item.damagedQuantity || 0);
+    const totalDeduct = issuedQty + damagedQty;
+    
+    if (totalDeduct <= 0) {
+      throw new Error(`จำนวนรวมที่เบิกและเสียหายของ SKU ${item.sku} ต้องมากกว่า 0`);
+    }
+    
+    let found = false;
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][skuCol - 1] || '').trim().toLowerCase() === targetSku) {
+        found = true;
+        const currentQty = Number(rows[i][qtyCol - 1] || 0);
+        if (currentQty < totalDeduct) {
+          throw new Error(`สินค้า ${rows[i][nameCol - 1] || item.sku} คงคลังไม่เพียงพอ (มีอยู่ ${currentQty} แต่ต้องการเบิก/เสียหาย ${totalDeduct})`);
+        }
+        break;
+      }
+    }
+    if (!found) {
+      throw new Error(`ไม่พบสินค้า SKU ${item.sku} ในระบบ`);
+    }
+  }
+  
+  const results = [];
+  // Perform the deduction and logging for each item
+  for (let k = 0; k < items.length; k++) {
+    const item = items[k];
+    const targetSku = String(item.sku || '').trim().toLowerCase();
+    const issuedQty = Number(item.issuedQuantity || 0);
+    const damagedQty = Number(item.damagedQuantity || 0);
+    const totalDeduct = issuedQty + damagedQty;
+    
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][skuCol - 1] || '').trim().toLowerCase() === targetSku) {
+        const currentQty = Number(rows[i][qtyCol - 1] || 0);
+        const remainingQty = currentQty - totalDeduct;
+        
+        // Update sheet
+        sheet.getRange(i + 1, qtyCol).setValue(remainingQty);
+        // Update rows array in case there are duplicates or subsequent operations
+        rows[i][qtyCol - 1] = remainingQty;
+        
+        const zoneVal = zoneCol > 0 ? rows[i][zoneCol - 1] : '';
+        const nameVal = nameCol > 0 ? rows[i][nameCol - 1] : '';
+        
+        const details = `ตำแหน่ง: ${zoneVal} | ก่อนเบิก: ${currentQty} | เบิกออก: ${issuedQty} | เสียหาย: ${damagedQty} | หลังเบิก: ${remainingQty}`;
+        
+        logAudit(
+          'ISSUE', 
+          'Product', 
+          item.sku, 
+          item.supplierId, 
+          details, 
+          data.creator, 
+          '', 
+          'นายปาณชัย พรมภักดี', 
+          data.reason
+        );
+        
+        results.push({
+          sku: item.sku,
+          name: nameVal,
+          zone: zoneVal,
+          previousQuantity: currentQty,
+          issuedQuantity: issuedQty,
+          damagedQuantity: damagedQty,
+          remainingQuantity: remainingQty
+        });
+        break;
+      }
+    }
+  }
+  
+  return {
+    message: 'เบิกสินค้าสำเร็จ',
+    results: results
+  };
 }
 
 // =========================================================================

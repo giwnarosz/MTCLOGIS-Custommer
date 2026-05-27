@@ -1,5 +1,5 @@
 // กำหนด Google Apps Script Web App URL ที่นี่
-const API_URL = "https://script.google.com/macros/s/AKfycbzl5A6V4cJzjmO-M_xKc5SHjvxZLJa8Z7U8hArwxiLBCuTLoDTFRhERS60UMC3dPYJ-/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyLvnvU-sPSgyB233m5Ssl6lku3aKhjtptIM56Lrfvy4NP4wlFCvdpfrG2eUcAMzPYY/exec";
 
 // App State
 let appState = {
@@ -24,7 +24,8 @@ let appState = {
   printProductCurrentPage: 1,
   printProductPerPage: 10,
   printSupplierSelections: [],
-  printSupplierFilteredList: null
+  printSupplierFilteredList: null,
+  goodsIssueBasket: []
 };
 
 // Document Ready
@@ -90,6 +91,7 @@ async function fetchDataAll() {
     if (logsData.status === 'success') appState.auditLogs = logsData.data;
 
     populateSupplierDropdowns();
+    populateGoodsIssueSuppliers();
     renderProducts();
     renderSuppliers();
     renderLogs();
@@ -181,7 +183,8 @@ function switchTab(tabId) {
   const titles = {
     'products': 'จัดการสินค้า (Products)',
     'suppliers': 'จัดการคู่ค้า (Suppliers)',
-    'audit-logs': 'ประวัติการทำงาน (Audit Logs)'
+    'goods-issue': 'เบิกสินค้า (Goods Issue)',
+    'audit-logs': 'ประวัติการทำงาน (Audit Log)'
   };
   const pageTitle = document.getElementById('page-title');
   if (pageTitle) pageTitle.innerText = titles[tabId];
@@ -1339,7 +1342,6 @@ function filterPrintSelection() {
   
   if (!query) {
     appState.printProductFilteredList = selectedSupplier ? baseList : null;
-    appState.printSelections = baseList.map(item => item.SKU);
   } else {
     appState.printProductFilteredList = baseList.filter(item => {
       const matchesSKU = String(item.SKU || '').toLowerCase().includes(query);
@@ -1347,7 +1349,6 @@ function filterPrintSelection() {
       const matchesSupplier = String(item.SupplierID || '').toLowerCase().includes(query);
       return matchesSKU || matchesBarcode || matchesSupplier;
     });
-    appState.printSelections = appState.printProductFilteredList.map(item => item.SKU);
   }
   appState.printProductCurrentPage = 1;
   renderPrintSelectionList();
@@ -1358,10 +1359,8 @@ function filterPrintProductsBySupplier() {
   const selectedSupplier = document.getElementById('print-filter-supplier').value;
   if (!selectedSupplier) {
     appState.printProductFilteredList = null;
-    appState.printSelections = appState.products.map(item => item.SKU);
   } else {
     appState.printProductFilteredList = appState.products.filter(item => item.SupplierID === selectedSupplier);
-    appState.printSelections = appState.printProductFilteredList.map(item => item.SKU);
   }
   appState.printProductCurrentPage = 1;
   renderPrintSelectionList();
@@ -1372,8 +1371,7 @@ function renderPrintPreview() {
   const tbody = document.getElementById('print-table-body');
   if (!tbody) return;
 
-  const currentList = appState.printProductFilteredList || appState.products;
-  const selectedProducts = currentList.filter(item => 
+  const selectedProducts = appState.products.filter(item => 
     appState.printSelections && appState.printSelections.includes(item.SKU)
   );
 
@@ -1407,8 +1405,8 @@ function renderPrintPreview() {
         <td class="py-2 px-2 border-end border-secondary-subtle text-center font-mono" style="font-size: 0.9em;">${item.SupplierID || '-'}</td>
         <td class="py-2 px-2 border-end border-secondary-subtle text-center">${item.UOM}</td>
         <td class="py-2 px-2 border-end border-secondary-subtle text-end fw-medium">${new Number(item.Quantity).toLocaleString('th-TH')}</td>
-        <td class="py-2 px-2 text-center text-secondary opacity-50">
-          [ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ] ${item.UOM}
+        <td class="py-2 px-2 text-center text-secondary opacity-50" style="white-space: nowrap !important;">
+          [ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ] ${item.UOM}
         </td>
       </tr>
     `;
@@ -1433,8 +1431,8 @@ function renderPrintPreview() {
         displayValue: true,
         fontSize: 10,
         textMargin: 2,
-        height: 25,
-        width: 1.2
+        height: 50,
+        width: 2.0
       });
     } catch (e) {
       // Fallback to CODE128 if EAN13 generation fails (e.g. invalid checksum)
@@ -1444,8 +1442,8 @@ function renderPrintPreview() {
           displayValue: true,
           fontSize: 10,
           textMargin: 2,
-          height: 25,
-          width: 1.2
+          height: 50,
+          width: 2.0
         });
       } catch (err) {
         console.error("Barcode generation failed for SKU " + item.SKU, err);
@@ -1626,4 +1624,328 @@ function updatePrintSupplierNames() {
 
 function closePrintSupplierModal() {
   document.getElementById('print-supplier-modal').classList.add('hidden');
+}
+
+// =========================================================================
+// 6. โมดูลการเบิกสินค้าออกจากคลัง (WMS Goods Issue)
+// =========================================================================
+
+function populateGoodsIssueSuppliers() {
+  const selectEl = document.getElementById('issue-supplier-id');
+  if (!selectEl) return;
+  const options = appState.suppliers.map(s => `<option value="${s.SupplierID}">${s.SupplierID} - ${s.CompanyName}</option>`).join('');
+  selectEl.innerHTML = '<option value="">-- เลือกรหัสคู่ค้า --</option>' + options;
+}
+
+function onIssueSupplierChange() {
+  const supplierId = document.getElementById('issue-supplier-id').value;
+  const compNameInput = document.getElementById('issue-company-name');
+  const skuSelect = document.getElementById('issue-product-sku');
+  
+  if (!compNameInput || !skuSelect) return;
+  
+  compNameInput.value = '';
+  skuSelect.innerHTML = '<option value="">-- เลือกสินค้า (กรองตามคู่ค้า) --</option>';
+  document.getElementById('issue-product-zone').value = '-';
+  document.getElementById('issue-product-onhand').value = '0';
+  document.getElementById('issue-quantity').value = '';
+  document.getElementById('issue-damaged-quantity').value = '0';
+  document.getElementById('issue-remaining-preview').value = '0';
+  
+  if (!supplierId) return;
+  
+  const supplier = appState.suppliers.find(s => s.SupplierID === supplierId);
+  if (supplier) {
+    compNameInput.value = supplier.CompanyName;
+  }
+  
+  const filteredProducts = appState.products.filter(p => p.SupplierID === supplierId);
+  const options = filteredProducts.map(p => `<option value="${p.SKU}">${p.SKU} - ${p.Name}</option>`).join('');
+  skuSelect.innerHTML = '<option value="">-- เลือกสินค้า (กรองตามคู่ค้า) --</option>' + options;
+}
+
+function onIssueProductChange() {
+  const sku = document.getElementById('issue-product-sku').value;
+  const zoneInput = document.getElementById('issue-product-zone');
+  const onhandInput = document.getElementById('issue-product-onhand');
+  
+  if (!zoneInput || !onhandInput) return;
+  
+  zoneInput.value = '-';
+  onhandInput.value = '0';
+  document.getElementById('issue-quantity').value = '';
+  document.getElementById('issue-damaged-quantity').value = '0';
+  document.getElementById('issue-remaining-preview').value = '0';
+  
+  if (!sku) return;
+  
+  const product = appState.products.find(p => p.SKU === sku);
+  if (product) {
+    zoneInput.value = product.Zone || '-';
+    onhandInput.value = product.Quantity || 0;
+    calculateIssueRemaining();
+  }
+}
+
+function calculateIssueRemaining() {
+  const onhand = Number(document.getElementById('issue-product-onhand').value || 0);
+  const issued = Number(document.getElementById('issue-quantity').value || 0);
+  const damaged = Number(document.getElementById('issue-damaged-quantity').value || 0);
+  
+  const remaining = onhand - (issued + damaged);
+  const remainingInput = document.getElementById('issue-remaining-preview');
+  
+  if (remainingInput) {
+    remainingInput.value = remaining;
+    if (remaining < 0) {
+      remainingInput.classList.add('text-danger');
+      remainingInput.classList.remove('text-primary');
+    } else {
+      remainingInput.classList.remove('text-danger');
+      remainingInput.classList.add('text-primary');
+    }
+  }
+}
+
+function addGoodsIssueItem(event) {
+  event.preventDefault();
+  
+  const supplierId = document.getElementById('issue-supplier-id').value;
+  const compName = document.getElementById('issue-company-name').value;
+  const sku = document.getElementById('issue-product-sku').value;
+  const zone = document.getElementById('issue-product-zone').value;
+  const onhand = Number(document.getElementById('issue-product-onhand').value || 0);
+  const issued = Number(document.getElementById('issue-quantity').value || 0);
+  const damaged = Number(document.getElementById('issue-damaged-quantity').value || 0);
+  const remaining = onhand - (issued + damaged);
+  
+  if (!supplierId || !sku || issued <= 0) {
+    Swal.fire('กรอกข้อมูลไม่ครบถ้วน', 'กรุณาเลือกคู่ค้า สินค้า และจำนวนที่จะเบิกให้ถูกต้อง', 'warning');
+    return;
+  }
+  
+  if (remaining < 0) {
+    Swal.fire('สินค้าคงคลังไม่พอ', 'จำนวนเบิกรวมกับจำนวนชำรุดเสียหาย เกินยอดคงคลังที่มีอยู่จริง!', 'error');
+    return;
+  }
+  
+  const product = appState.products.find(p => p.SKU === sku);
+  if (!product) return;
+  
+  // Check duplicate in basket
+  if (appState.goodsIssueBasket.some(item => item.sku === sku)) {
+    Swal.fire('สินค้าซ้ำในรายการ', 'มีสินค้านี้อยู่ในรายการที่จะเบิกอยู่แล้ว หากต้องการเปลี่ยนจำนวนกรุณาลบรายการเดิมออกก่อน', 'warning');
+    return;
+  }
+  
+  // Add to basket
+  appState.goodsIssueBasket.push({
+    supplierId,
+    compName,
+    sku,
+    name: product.Name,
+    zone,
+    onhand,
+    issuedQuantity: issued,
+    damagedQuantity: damaged,
+    remaining,
+    uom: product.UOM,
+    barcode: product.Barcode
+  });
+  
+  // Reset item inputs, keeping supplier active for convenience
+  document.getElementById('issue-product-sku').value = '';
+  onIssueProductChange();
+  
+  renderGoodsIssueBasket();
+  Swal.fire({
+    title: 'เพิ่มลงรายการสำเร็จ!',
+    icon: 'success',
+    timer: 800,
+    showConfirmButton: false
+  });
+}
+
+function renderGoodsIssueBasket() {
+  const tbody = document.getElementById('goods-issue-basket-body');
+  if (!tbody) return;
+  
+  if (appState.goodsIssueBasket.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center py-5 text-muted">ยังไม่มีสินค้าในรายการเบิกออก</td>
+      </tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = appState.goodsIssueBasket.map((item, idx) => `
+    <tr>
+      <td class="font-mono text-xs">${item.supplierId}</td>
+      <td class="font-mono text-xs text-blue-600 fw-semibold">${item.sku}</td>
+      <td class="fw-semibold text-slate-800">${item.name}</td>
+      <td class="font-mono text-xs text-muted">${item.zone}</td>
+      <td class="text-end fw-semibold text-success">${item.issuedQuantity.toLocaleString('th-TH')} ${item.uom}</td>
+      <td class="text-end text-danger">${item.damagedQuantity.toLocaleString('th-TH')} ${item.uom}</td>
+      <td class="text-center">
+        <button type="button" onclick="removeGoodsIssueItem('${item.sku}')" class="btn btn-sm btn-outline-danger border-0 p-1 px-2.5">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function removeGoodsIssueItem(sku) {
+  appState.goodsIssueBasket = appState.goodsIssueBasket.filter(item => item.sku !== sku);
+  renderGoodsIssueBasket();
+}
+
+function previewGoodsIssueBasket() {
+  if (appState.goodsIssueBasket.length === 0) {
+    Swal.fire('ตะกร้าว่างเปล่า', 'กรุณาเพิ่มสินค้าลงในรายการเบิกอย่างน้อย 1 รายการก่อนพรีวิว', 'warning');
+    return;
+  }
+  
+  const requester = document.getElementById('issue-requester').value.trim();
+  const reason = document.getElementById('issue-reason').value.trim();
+  
+  if (!requester || !reason) {
+    Swal.fire('ระบุข้อมูลจำเป็น', 'กรุณากรอกชื่อผู้เบิกสินค้าและเหตุผลในการเบิกออกก่อนทำรายการพรีวิว', 'warning');
+    return;
+  }
+  
+  // Set up preview document fields
+  document.getElementById('print-issue-requester-name').innerText = requester;
+  document.getElementById('print-issue-reason-val').innerText = reason;
+  
+  const dateStr = new Date().toLocaleDateString('th-TH', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  document.getElementById('print-issue-date').innerText = dateStr;
+  
+  // For multi-supplier / multi-product, show multiple/various
+  const uniqueSuppliers = [...new Set(appState.goodsIssueBasket.map(item => item.supplierId))];
+  document.getElementById('print-issue-supplier-id-val').innerText = uniqueSuppliers.join(', ');
+  
+  const uniqueCompanies = [...new Set(appState.goodsIssueBasket.map(item => item.compName))];
+  document.getElementById('print-issue-company-name-val').innerText = uniqueCompanies.join(', ');
+  
+  document.querySelector('.print-issue-sign-requester').innerText = requester;
+  
+  const tbody = document.getElementById('print-issue-table-body');
+  if (tbody) {
+    tbody.innerHTML = appState.goodsIssueBasket.map((item, index) => {
+      const barcodeStr = (item.barcode !== undefined && item.barcode !== null) ? String(item.barcode).trim() : '';
+      const hasBarcode = barcodeStr !== '';
+      return `
+        <tr class="border-bottom border-secondary-subtle">
+          <td class="py-2 px-2 border-end border-secondary-subtle text-center">${index + 1}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-center">
+            ${hasBarcode ? `
+              <div class="barcode-container">
+                <svg class="barcode-svg" id="print-issue-barcode-svg-${item.sku}"></svg>
+              </div>
+            ` : '-'}
+          </td>
+          <td class="py-2 px-2 border-end border-secondary-subtle font-mono text-center">${item.sku}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle fw-semibold text-dark">${item.name}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-center font-mono">${item.zone || '-'}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-end">${item.onhand.toLocaleString('th-TH')}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-end fw-bold text-success">${item.issuedQuantity.toLocaleString('th-TH')}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-end text-danger">${item.damagedQuantity.toLocaleString('th-TH')}</td>
+          <td class="py-2 px-2 border-end border-secondary-subtle text-center text-secondary opacity-50" style="white-space: nowrap !important;">
+            [ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ]
+          </td>
+          <td class="py-2 px-2 text-center">${item.uom}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  // Render Barcodes
+  appState.goodsIssueBasket.forEach(item => {
+    const barcodeStr = (item.barcode !== undefined && item.barcode !== null) ? String(item.barcode).trim() : '';
+    const hasBarcode = barcodeStr !== '';
+    if (!hasBarcode) return;
+    
+    const isNumeric = /^\d+$/.test(barcodeStr);
+    const isEanLength = barcodeStr.length === 12 || barcodeStr.length === 13;
+    const formatType = (isNumeric && isEanLength) ? "EAN13" : "CODE128";
+    
+    setTimeout(() => {
+      try {
+        JsBarcode(`#print-issue-barcode-svg-${item.sku}`, barcodeStr, {
+          format: formatType,
+          displayValue: true,
+          fontSize: 10,
+          textMargin: 2,
+          height: 50,
+          width: 2.0
+        });
+      } catch (e) {
+        try {
+          JsBarcode(`#print-issue-barcode-svg-${item.sku}`, barcodeStr, {
+            format: "CODE128",
+            displayValue: true,
+            fontSize: 10,
+            textMargin: 2,
+            height: 50,
+            width: 2.0
+          });
+        } catch (err) {
+          console.error("Barcode generation failed in Goods Issue SKU " + item.sku, err);
+        }
+      }
+    }, 100);
+  });
+  
+  // Show Modal
+  appState.currentIssue = {
+    creator: requester,
+    reason: reason,
+    items: appState.goodsIssueBasket
+  };
+  
+  document.getElementById('print-issue-modal').classList.remove('hidden');
+}
+
+async function confirmAndPrintIssue() {
+  if (!appState.currentIssue) return;
+  
+  const payload = {
+    action: 'issue_product',
+    ...appState.currentIssue
+  };
+  
+  try {
+    const res = await callPostAPI(payload);
+    if (res && res.status === 'success') {
+      // Trigger print window
+      window.print();
+      
+      // Clear basket & form
+      appState.goodsIssueBasket = [];
+      renderGoodsIssueBasket();
+      
+      document.getElementById('goods-issue-form').reset();
+      onIssueSupplierChange();
+      
+      document.getElementById('issue-requester').value = '';
+      document.getElementById('issue-reason').value = '';
+      
+      closePrintIssueModal();
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function closePrintIssueModal() {
+  document.getElementById('print-issue-modal').classList.add('hidden');
+  appState.currentIssue = null;
 }
